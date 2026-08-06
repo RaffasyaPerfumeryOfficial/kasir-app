@@ -140,3 +140,38 @@ def struk_transaksi(request: Request, trx_id: int, db: Session = Depends(get_db)
             "items": json.loads(trx.items),
         },
     )
+
+@app.post("/produk/hapus/{produk_id}")
+def hapus_produk(produk_id: int, db: Session = Depends(get_db)):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    db.delete(produk)
+    db.commit()
+    return RedirectResponse(url="/manajemen", status_code=303)
+
+
+@app.get("/produk/edit/{produk_id}")
+def form_edit_produk(request: Request, produk_id: int, db: Session = Depends(get_db)):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    return templates.TemplateResponse(request, "edit_produk.html", {"produk": produk})
+
+
+@app.post("/produk/update/{produk_id}")
+def update_produk(
+    produk_id: int,
+    nama: str = Form(...),
+    harga: float = Form(...),
+    stok: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    produk.nama = nama
+    produk.harga = harga
+    produk.stok = stok
+    db.commit()
+    return RedirectResponse(url="/manajemen", status_code=303)

@@ -25,13 +25,19 @@ button{padding:6px 12px}
 </form>
 </div>
 <table>
-<tr><th>ID</th><th>Nama</th><th>Harga</th><th>Stok</th></tr>
+<tr><th>ID</th><th>Nama</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr>
 {% for p in produk_list %}
 <tr>
 <td>{{ p.id }}</td>
 <td>{{ p.nama }}</td>
-<td>{{ p.harga }}</td>
+<td>{{ "%0.0f"|format(p.harga) }}</td>
 <td>{{ p.stok }}</td>
+<td>
+<a href="/produk/edit/{{ p.id }}">Edit</a>
+<form method="post" action="/produk/hapus/{{ p.id }}" style="display:inline" onsubmit="return confirm('Hapus produk ini?')">
+<button type="submit">Hapus</button>
+</form>
+</td>
 </tr>
 {% endfor %}
 </table>
