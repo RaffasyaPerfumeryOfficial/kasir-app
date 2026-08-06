@@ -1,0 +1,39 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Manajemen Produk</title>
+<style>
+body{font-family:Arial;margin:20px;background:#f4f6f8}
+table{border-collapse:collapse;background:white;width:100%}
+td,th{border:1px solid #ccc;padding:8px;text-align:left}
+.kotak{background:white;padding:16px;margin-bottom:16px;border-radius:8px;max-width:500px}
+input{padding:6px;margin:4px 0}
+button{padding:6px 12px}
+</style>
+</head>
+<body>
+<h1>Manajemen Produk</h1>
+<p><a href="/kasir">Kasir</a> | <a href="/riwayat">Riwayat Transaksi</a></p>
+<div class="kotak">
+<h2>Tambah Produk</h2>
+<form method="post" action="/produk/simpan">
+<input name="nama" placeholder="Nama produk" required><br>
+<input name="harga" type="number" placeholder="Harga" required><br>
+<input name="stok" type="number" placeholder="Stok" required><br>
+<button type="submit">Simpan</button>
+</form>
+</div>
+<table>
+<tr><th>ID</th><th>Nama</th><th>Harga</th><th>Stok</th></tr>
+{% for p in produk_list %}
+<tr>
+<td>{{ p.id }}</td>
+<td>{{ p.nama }}</td>
+<td>{{ p.harga }}</td>
+<td>{{ p.stok }}</td>
+</tr>
+{% endfor %}
+</table>
+</body>
+</html>
