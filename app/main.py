@@ -175,3 +175,24 @@ def update_produk(
     produk.stok = stok
     db.commit()
     return RedirectResponse(url="/manajemen", status_code=303)
+
+@app.get("/laporan")
+def laporan_harian(request: Request, db: Session = Depends(get_db)):
+    transaksi_list = db.query(models.Transaksi).all()
+    rekap = {}
+    for t in transaksi_list:
+        key = t.dibuat.date()
+        if key not in rekap:
+            rekap[key] = {
+                "tanggal": key.strftime("%d/%m/%Y"),
+                "jumlah": 0,
+                "omzet": 0.0,
+                "key": key,
+            }
+        rekap[key]["jumlah"] += 1
+        rekap[key]["omzet"] += t.total
+    laporan = sorted(rekap.values(), key=lambda x: x["key"], reverse=True)
+    total_omzet = sum(t.total for t in transaksi_list)
+    return templates.TemplateResponse(
+        request, "laporan.html", {"laporan": laporan, "total_omzet": total_omzet}
+    )

@@ -1,0 +1,30 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Laporan Penjualan</title>
+<style>
+body{font-family:Arial;margin:20px;background:#f4f6f8}
+table{border-collapse:collapse;background:white;width:100%}
+td,th{border:1px solid #ccc;padding:8px;text-align:left}
+.kotak{background:white;padding:16px;margin-bottom:16px;border-radius:8px;max-width:500px}
+</style>
+</head>
+<body>
+<h1>Laporan Penjualan per Hari</h1>
+<p><a href="/kasir">Kasir</a> | <a href="/riwayat">Riwayat Transaksi</a> | <a href="/manajemen">Manajemen Produk</a></p>
+<div class="kotak">
+<p>Total omzet keseluruhan: Rp {{ "%0.0f"|format(total_omzet) }}</p>
+</div>
+<table>
+<tr><th>Tanggal</th><th>Jumlah Transaksi</th><th>Omzet</th></tr>
+{% for r in laporan %}
+<tr>
+<td>{{ r.tanggal }}</td>
+<td>{{ r.jumlah }}</td>
+<td>{{ "%0.0f"|format(r.omzet) }}</td>
+</tr>
+{% endfor %}
+</table>
+</body>
+</html>
