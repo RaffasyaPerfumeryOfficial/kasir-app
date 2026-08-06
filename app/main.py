@@ -196,3 +196,54 @@ def laporan_harian(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request, "laporan.html", {"laporan": laporan, "total_omzet": total_omzet}
     )
+
+import secrets
+
+USERS = {"admin": "1234", "kasir": "kasir123"}
+SESSIONS = set()
+
+
+@app.get("/login")
+def halaman_login(request: Request):
+    return templates.TemplateResponse(request, "login.html", {"pesan": ""})
+
+
+@app.post("/login/masuk")
+def login_masuk(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    if USERS.get(username) == password:
+        sid = secrets.token_hex(16)
+        SESSIONS.add(sid)
+        resp = RedirectResponse("/kasir", status_code=303)
+        resp.set_cookie("session_id", sid)
+        return resp
+    return templates.TemplateResponse(
+        request, "login.html", {"pesan": "Username atau password salah"}
+    )
+
+
+@app.get("/logout")
+def logout(request: Request):
+    sid = request.cookies.get("session_id")
+    SESSIONS.discard(sid)
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie("session_id")
+    return resp
+
+
+@app.middleware("http")
+async def proteksi_login(request: Request, call_next):
+    path = request.url.path
+    publik = (
+        path == "/login"
+        or path == "/login/masuk"
+        or path == "/favicon.ico"
+    )
+    if not publik:
+        sid = request.cookies.get("session_id")
+        if not sid or sid not in SESSIONS:
+            return RedirectResponse("/login", status_code=303)
+    return await call_next(request)
