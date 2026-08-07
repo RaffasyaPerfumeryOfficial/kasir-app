@@ -1,4 +1,4 @@
-﻿import json
+import json
 import re
 import random
 import secrets
@@ -669,10 +669,9 @@ def jawab_ai(q, db):
     bibit = [p for p in produk_list if (p.kategori or "") == "BIBIT"]
     nama_bibit = set(p.nama for p in bibit)
     if "notes" in q or "aroma" in q or "wangi" in q:
-        clean = q.replace("notes", "").replace("aroma", "").replace("wangi", "").strip()
-        for p in produk_list:
-            if p.nama.lower() in q or (clean and clean in p.nama.lower()):
-                return p.nama + ":\n" + (N.get(p.nama) or "Data notes belum ada untuk produk ini.")
+        t2 = cari_produk(q, produk_list)
+        if t2:
+            return t2.nama + ":\n" + (N.get(t2.nama) or "Data notes belum ada untuk produk ini.")
         return "Produk tidak ditemukan. Contoh pertanyaan: notes AFNAN - 9PM"
     if "laris" in q:
         hit = {}
@@ -773,20 +772,7 @@ def jawab_ai2(q, db):
         for it in json.loads(t.items):
             terjual[it["nama"]] = terjual.get(it["nama"], 0) + it["jumlah"]
     if "mirip" in ql or "serupa" in ql or "menyerupai" in ql:
-        target = None
-        for p in produk_list:
-            if p.nama.lower() in ql:
-                target = p
-                break
-        if not target:
-            clean = ql
-            for w in ["mirip", "serupa", "menyerupai", "parfum", "yang", "apa", "dengan"]:
-                clean = clean.replace(w, "")
-            clean = clean.strip()
-            for p in produk_list:
-                if clean and clean in p.nama.lower():
-                    target = p
-                    break
+        target = cari_produk(ql, produk_list)
         if not target:
             return "Sebutkan nama parfumnya. Contoh: yang mirip sauvage"
         my_notes = (N.get(target.nama) or "").lower()
@@ -810,6 +796,59 @@ def jawab_ai2(q, db):
         for i, (s, p) in enumerate(top):
             out += str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ")\n"
         return out
+    target = cari_produk(ql, produk_list)
+    if target and not ("notes" in ql or "aroma" in ql or "wangi" in ql):
+        if "stok" in ql or "sisa" in ql or "tersisa" in ql:
+            return "Stok " + target.nama + ": " + str(target.stok or 0)
+        if "modal" in ql or "grosir" in ql:
+            return "Harga modal " + target.nama + ": " + rp(target.harga_modal or 0)
+        if "jual" in ql or "pasaran" in ql:
+            return "Harga jual " + target.nama + ": " + rp(target.harga)
+        if "untung" in ql or "laba" in ql:
+            return "Untung per pcs " + target.nama + ": " + rp(target.harga - (target.harga_modal or 0))
+        if "kode" in ql or "pabrik" in ql or "brand" in ql:
+            return "Kode / pabrik " + target.nama + ": " + (target.kode or "-")
+        if "gender" in ql or "untuk siapa" in ql:
+            return target.nama + " untuk: " + G.get(target.nama, "unisex")
+        if "kategori" in ql:
+            return "Kategori " + target.nama + ": " + (target.kategori or "-")
+        g = G.get(target.nama, "-")
+        nts = N.get(target.nama, "")
+        out = target.nama + "\n"
+        out += "Kode / pabrik: " + (target.kode or "-") + "\n"
+        out += "Kategori: " + (target.kategori or "-") + "\n"
+        out += "Gender: " + g + "\n"
+        out += "Harga modal: " + rp(target.harga_modal or 0) + "\n"
+        out += "Harga jual: " + rp(target.harga) + "\n"
+        out += "Untung per pcs: " + rp(target.harga - (target.harga_modal or 0)) + "\n"
+        out += "Stok sekarang: " + str(target.stok or 0) + "\n"
+        out += "Terjual: " + str(terjual.get(target.nama, 0))
+        if nts:
+            out += "\nNotes: " + nts
+        return out
+    if "kode" in ql or "pabrik" in ql or "brand" in ql or "dari apa" in ql:
+        codes = set((p.kode or "").lower() for p in produk_list if p.kode)
+        found = None
+        for kod in codes:
+            if re.search(r"\b" + re.escape(kod) + r"\b", ql):
+                found = kod
+                break
+        if found:
+            pool = [p for p in produk_list if (p.kode or "").lower() == found]
+            pool = acak(pilih_pool(pool, ql), 15)
+            if pool:
+                return "Produk kode " + found.upper() + ":\n" + "\n".join(str(i + 1) + ". " + p.nama + " (stok " + str(p.stok or 0) + ")" for i, p in enumerate(pool))
+    if "stok" in ql:
+        if "kosong" in ql or "habis" in ql:
+            pool = acak([p for p in produk_list if (p.stok or 0) == 0 and boleh(p.nama, ql)], 10)
+            if pool:
+                return "Stok kosong:\n" + "\n".join(str(i + 1) + ". " + p.nama for i, p in enumerate(pool))
+            return "Tidak ada stok kosong."
+        if "menipis" in ql or "hampir" in ql or "20" in ql:
+            pool = acak([p for p in produk_list if 0 < (p.stok or 0) < 20 and boleh(p.nama, ql)], 10)
+            if pool:
+                return "Stok hampir habis (<20):\n" + "\n".join(str(i + 1) + ". " + p.nama + " (stok " + str(p.stok or 0) + ")" for i, p in enumerate(pool))
+            return "Tidak ada stok di bawah 20."
     if ("omzet" in ql or "omset" in ql) and ("hari ini" in ql or "sekarang" in ql):
         tot = 0.0
         tun = 0.0
@@ -943,7 +982,7 @@ def jawab_ai2(q, db):
             out += "(semua sudah terjual)"
         return out
     if "notes" in ql or "note" in ql or "aroma" in ql or "wangi" in ql or "parfum" in ql or "parfume" in ql:
-        has_name = any(p.nama.lower() in ql for p in produk_list)
+        has_name = ("apa saja" not in ql) and cari_produk(ql, produk_list) is not None
         if not has_name:
             clean = ql
             for w in ["parfume", "parfum", "notes", "note", "aroma", "wangi", "apa", "saja", "yang", "ini", "dengan", "laris", "terlaris", "hari", "bulan", "minggu", "?"]:
@@ -1089,3 +1128,33 @@ def pilih_pool(pool, ql):
         return acak(candy, 2) + acak(others, 8)
     return [p for p in pool if not p.nama.startswith("ARABIC PERFUME") and not p.nama.startswith("CANDY / FRUIT")]
 
+
+STOP_WORDS = ["stok", "berapa", "harga", "jual", "modal", "grosir", "pasaran", "kode", "pabrik", "brand", "dari", "apa", "saja", "yang", "parfum", "parfume", "notes", "note", "aroma", "wangi", "hari", "ini", "terjual", "laris", "kosong", "habis", "menipis", "restock", "untuk", "siapa", "gender", "kategori", "untung", "laba", "sekarang", "ada", "gak", "tidak", "kalau", "mirip", "serupa", "dan", "di", "ke", "dengan", "omzet", "omset", "qris", "tunai", "non", "naik", "turun", "minggu", "bulan", "tahun", "margin", "pengeluaran", "dead", "stock", "top", "best", "seller", "perlu", "harus", "produk", "pria", "wanita", "cowok", "cewek", "cwe", "cwek", "cowo", "cwok", "laki", "bujang", "gadis", "perempuan"]
+
+def cari_produk(ql, produk_list):
+    import difflib
+    for p in produk_list:
+        if p.nama.lower() in ql:
+            return p
+    toks = [w for w in re.split("[^a-z0-9]+", ql) if len(w) >= 3 and w not in STOP_WORDS]
+    if not toks:
+        return None
+    best = None
+    best_score = 0.0
+    for p in produk_list:
+        ntoks = [w for w in re.split("[^a-z0-9]+", p.nama.lower()) if len(w) >= 3]
+        score = 0.0
+        for w in toks:
+            if w in ntoks:
+                score += 1.0
+            else:
+                if difflib.get_close_matches(w, ntoks, n=1, cutoff=0.8):
+                    score += 0.8
+        if score > 0:
+            norm = score / len(toks)
+            if norm > best_score:
+                best_score = norm
+                best = p
+    if best_score >= 0.8:
+        return best
+    return None
