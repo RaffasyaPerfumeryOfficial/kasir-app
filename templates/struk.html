@@ -12,7 +12,7 @@ table{width:100%;border-collapse:collapse;margin-top:8px}
 td{padding:2px 0;vertical-align:top}
 .r{text-align:right}
 hr{border:none;border-top:1px dashed #000;margin:8px 0}
-.tombol{display:block;margin:16px auto;padding:8px 16px}
+.tombol{display:block;margin:8px auto;padding:8px 16px}
 @media print{
 body{background:white;margin:0}
 .struk{width:100%;padding:0}
@@ -38,12 +38,13 @@ body{background:white;margin:0}
 <hr>
 <table>
 <tr><td>TOTAL</td><td class="r">{{ "%0.0f"|format(trx.total) }}</td></tr>
-<tr><td>TUNAI</td><td class="r">{{ "%0.0f"|format(trx.bayar) }}</td></tr>
+<tr><td>BAYAR</td><td class="r">{{ "%0.0f"|format(trx.bayar) }}</td></tr>
 <tr><td>KEMBALIAN</td><td class="r">{{ "%0.0f"|format(trx.kembalian) }}</td></tr>
 </table>
 <hr>
 <p style="text-align:center">Terima kasih sudah berbelanja!</p>
 </div>
 <button class="tombol" onclick="window.print()">Cetak Struk</button>
+<a href="/kasir" style="text-decoration:none"><button class="tombol" style="background:var(--success)">OK - Kembali ke Kasir</button></a>
 </body>
 </html>
