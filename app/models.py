@@ -106,3 +106,9 @@ def migrate_db():
                 "UPDATE transaksi SET p_tunai = 0, p_nontunai = total "
                 "WHERE p_nontunai IS NULL AND metode IS NOT NULL AND metode != 'TUNAI'"
             ))
+
+class Sesi(Base):
+    __tablename__ = "sesi"
+
+    token = Column(String, primary_key=True)
+    dibuat = Column(DateTime, default=datetime.now)

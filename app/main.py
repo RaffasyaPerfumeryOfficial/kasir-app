@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import models
-from app.db import Base, engine, get_db
+from app.db import Base, SessionLocal, engine, get_db
 
 Base.metadata.create_all(bind=engine)
 models.migrate_db()
@@ -67,7 +67,7 @@ async def proteksi_login(request: Request, call_next):
     )
     if not publik:
         sid = request.cookies.get("session_id")
-        if not sid or sid not in SESSIONS:
+        if not sid or not sesi_valid(sid):
             return RedirectResponse("/login", status_code=303)
     return await call_next(request)
 
@@ -81,9 +81,12 @@ def halaman_login(request: Request):
 def login_masuk(request: Request, username: str = Form(...), password: str = Form(...)):
     if USERS.get(username) == password:
         sid = secrets.token_hex(16)
-        SESSIONS.add(sid)
+        dbx = SessionLocal()
+        dbx.add(models.Sesi(token=sid))
+        dbx.commit()
+        dbx.close()
         resp = RedirectResponse("/dashboard", status_code=303)
-        resp.set_cookie("session_id", sid)
+        resp.set_cookie("session_id", sid, max_age=604800)
         return resp
     return templates.TemplateResponse(
         request, "login.html", {"pesan": "Username atau password salah"}
@@ -93,7 +96,10 @@ def login_masuk(request: Request, username: str = Form(...), password: str = For
 @app.get("/logout")
 def logout(request: Request):
     sid = request.cookies.get("session_id")
-    SESSIONS.discard(sid)
+    dbx = SessionLocal()
+    dbx.query(models.Sesi).filter_by(token=sid).delete()
+    dbx.commit()
+    dbx.close()
     resp = RedirectResponse("/login", status_code=303)
     resp.delete_cookie("session_id")
     return resp
@@ -548,3 +554,11 @@ def backup_db():
         filename="backup-kasir-" + date.today().isoformat() + ".db",
         media_type="application/octet-stream",
     )
+
+
+def sesi_valid(token):
+    dbx = SessionLocal()
+    try:
+        return dbx.query(models.Sesi).filter_by(token=token).first() is not None
+    finally:
+        dbx.close()
