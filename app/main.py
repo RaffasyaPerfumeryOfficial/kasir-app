@@ -679,7 +679,7 @@ def jawab_ai(q, db):
         for t in transaksi_list:
             if t.dibuat and t.dibuat.date() == today:
                 for it in json.loads(t.items):
-                    if it["nama"] in nama_bibit:
+                    if it["nama"] in nama_bibit and boleh(it["nama"], q):
                         hit[it["nama"]] = hit.get(it["nama"], 0) + it["jumlah"]
         if hit:
             top = sorted(hit.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -691,7 +691,7 @@ def jawab_ai(q, db):
         for t in transaksi_list:
             if t.dibuat and t.dibuat.date() >= month_start:
                 for it in json.loads(t.items):
-                    if it["nama"] in nama_bibit:
+                    if it["nama"] in nama_bibit and boleh(it["nama"], q):
                         hit[it["nama"]] = hit.get(it["nama"], 0) + it["jumlah"]
         terlaris = sorted(hit.items(), key=lambda x: x[1], reverse=True)[:3]
         margin_top = sorted(bibit, key=lambda p: p.harga - (p.harga_modal or 0), reverse=True)[:3]
@@ -767,6 +767,7 @@ def jawab_ai2(q, db):
     ql = (q or "").lower()
     transaksi_list = db.query(models.Transaksi).all()
     produk_list = db.query(models.Produk).all()
+    pengeluaran_list = db.query(models.Pengeluaran).all()
     terjual = {}
     for t in transaksi_list:
         for it in json.loads(t.items):
@@ -821,7 +822,7 @@ def jawab_ai2(q, db):
         return "Omzet hari ini:\n" + rp(tot) + "\nQRIS " + rp(non) + "\nTunai " + rp(tun)
     if "harus" in ql and ("jual" in ql or "terjual" in ql):
         out = "Produk yang harus dijual hari ini:\nPEREMPUAN:\n"
-        pool_w = [p for p in produk_list if G.get(p.nama, "").startswith("wanita") or G.get(p.nama, "").startswith("unisex")]
+        pool_w = pilih_pool([p for p in produk_list if G.get(p.nama, "").startswith("wanita") or G.get(p.nama, "").startswith("unisex")], ql)
         sold_w = sorted([p for p in pool_w if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:5]
         never_w = daftar_belum_terjual(pool_w, terjual, 5)
         i = 0
@@ -829,7 +830,7 @@ def jawab_ai2(q, db):
             i += 1
             out += str(i) + ". " + p.nama + "\n"
         out += "LAKI-LAKI:\n"
-        pool_m = [p for p in produk_list if G.get(p.nama, "").startswith("pria") or G.get(p.nama, "").startswith("unisex")]
+        pool_m = pilih_pool([p for p in produk_list if G.get(p.nama, "").startswith("pria") or G.get(p.nama, "").startswith("unisex")], ql)
         sold_m = sorted([p for p in pool_m if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:5]
         never_m = daftar_belum_terjual(pool_m, terjual, 5)
         i = 0
@@ -838,20 +839,92 @@ def jawab_ai2(q, db):
             out += str(i) + ". " + p.nama + "\n"
         return out
     if "laris" in ql and ("habis" in ql or "menipis" in ql or "hampir" in ql):
-        low = [p for p in produk_list if terjual.get(p.nama, 0) > 0 and (p.stok or 0) < 10]
+        low = [p for p in produk_list if terjual.get(p.nama, 0) > 0 and (p.stok or 0) < 10 and boleh(p.nama, ql)]
         low.sort(key=lambda p: terjual[p.nama], reverse=True)
         if not low:
             return "Tidak ada produk laris yang hampir habis. Stok aman."
         out = "Laris tetapi hampir habis / habis:\n"
         out += "\n".join(str(i + 1) + ". " + p.nama + " (terjual " + str(terjual[p.nama]) + ", stok " + str(p.stok) + ")" for i, p in enumerate(low[:10]))
         return out
+    if ("laba" in ql or "untung" in ql or "keuntungan" in ql) and ("hari ini" in ql or "sekarang" in ql):
+        omzet = 0.0
+        modal = 0.0
+        keluar = 0.0
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() == date.today():
+                omzet += t.total
+                modal += t.total_modal or 0.0
+        for p in pengeluaran_list:
+            if p.dibuat.date() == date.today():
+                keluar += p.jumlah
+        laba = omzet - modal - keluar
+        return "Laba hari ini:\nOmzet " + rp(omzet) + "\nModal " + rp(modal) + "\nPengeluaran " + rp(keluar) + "\nKeuntungan " + rp(laba)
+    if ("laba" in ql or "untung" in ql or "keuntungan" in ql or "margin" in ql) and "bulan" in ql:
+        month_start = date.today().replace(day=1)
+        omzet = 0.0
+        modal = 0.0
+        keluar = 0.0
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() >= month_start:
+                omzet += t.total
+                modal += t.total_modal or 0.0
+        for p in pengeluaran_list:
+            if p.dibuat.date() >= month_start:
+                keluar += p.jumlah
+        laba = omzet - modal - keluar
+        margin = (laba / omzet * 100) if omzet else 0.0
+        return "Laba bulan ini:\nOmzet " + rp(omzet) + "\nModal " + rp(modal) + "\nPengeluaran " + rp(keluar) + "\nKeuntungan " + rp(laba) + "\nMargin " + str(int(margin)) + "%"
+    if "tidak laku" in ql or "stok banyak" in ql or "dead" in ql:
+        dead = [p for p in produk_list if terjual.get(p.nama, 0) == 0 and (p.stok or 0) >= 50 and G.get(p.nama, "") not in ("", "-") and boleh(p.nama, ql)]
+        dead.sort(key=lambda p: p.stok or 0, reverse=True)
+        if not dead:
+            return "Tidak ada dead stock. Semua stok bergerak."
+        out = "Stok banyak tapi belum laku (beri promo!):\n"
+        out += "\n".join(str(i + 1) + ". " + p.nama + " (stok " + str(p.stok) + ")" for i, p in enumerate(acak(dead, 10)))
+        return out
+    if "terlaris" in ql or "best seller" in ql or "bestseller" in ql:
+        month_start = date.today().replace(day=1)
+        hit = {}
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() >= month_start:
+                for it in json.loads(t.items):
+                    if boleh(it["nama"], ql):
+                        hit[it["nama"]] = hit.get(it["nama"], 0) + it["jumlah"]
+        top = sorted(hit.items(), key=lambda x: x[1], reverse=True)[:5]
+        if not top:
+            return "Belum ada penjualan bulan ini."
+        return "Top 5 terlaris bulan ini:\n" + "\n".join(str(i + 1) + ". " + n + " (" + str(v) + " terjual)" for i, (n, v) in enumerate(top))
+    if "naik" in ql or "turun" in ql or ("minggu" in ql and ("omzet" in ql or "omset" in ql)):
+        today = date.today()
+        omzet_7 = sum(t.total for t in transaksi_list if t.dibuat and today - timedelta(days=6) <= t.dibuat.date() <= today)
+        omzet_7p = sum(t.total for t in transaksi_list if t.dibuat and today - timedelta(days=13) <= t.dibuat.date() <= today - timedelta(days=7))
+        if omzet_7p > 0:
+            diff = (omzet_7 - omzet_7p) / omzet_7p * 100
+            arah = "NAIK" if diff >= 0 else "TURUN"
+            return "Omzet 7 hari: " + rp(omzet_7) + "\n7 hari sebelumnya: " + rp(omzet_7p) + "\nHasil: " + arah + " " + str(int(abs(diff))) + "%"
+        return "Omzet 7 hari: " + rp(omzet_7) + "\n(Belum ada data minggu sebelumnya.)"
+    if "qris" in ql or "non tunai" in ql:
+        month_start = date.today().replace(day=1)
+        non = 0.0
+        tun = 0.0
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() >= month_start:
+                non += t.p_nontunai or 0.0
+                tun += t.p_tunai or 0.0
+        return "Bulan ini:\nQRIS / NON-TUNAI " + rp(non) + "\nTUNAI " + rp(tun) + "\n(Samakan angka QRIS dengan mutasi rekening Anda.)"
+    if "restock" in ql or "stok menipis" in ql:
+        low = [p for p in produk_list if (p.stok or 0) < 10 and boleh(p.nama, ql)]
+        low.sort(key=lambda p: p.stok or 0)
+        if not low:
+            return "Semua stok aman. Tidak perlu restock."
+        return "Perlu restock (stok < 10):\n" + "\n".join(str(i + 1) + ". " + p.nama + " (stok " + str(p.stok) + ")" for i, p in enumerate(low[:10]))
     male_kw = ["pria", "cowok", "cowo", "cwok", "laki", "bujang"]
     female_kw = ["wanita", "perempuan", "cewek", "cewe", "cwek", "cwe", "gadis"]
     is_male = any(k in ql for k in male_kw)
     is_female = any(k in ql for k in female_kw)
     if (is_male or is_female) and ("parfum" in ql or "apa" in ql):
         gender = "pria" if is_male else "wanita"
-        pool = [p for p in produk_list if G.get(p.nama, "").startswith(gender) or G.get(p.nama, "").startswith("unisex")]
+        pool = pilih_pool([p for p in produk_list if G.get(p.nama, "").startswith(gender) or G.get(p.nama, "").startswith("unisex")], ql)
         if "anak" in ql or "bayi" in ql or "remaja" in ql:
             pool2 = [p for p in pool if any(a in G.get(p.nama, "") for a in ["anak", "bayi", "remaja"])]
             if pool2:
@@ -869,20 +942,22 @@ def jawab_ai2(q, db):
         else:
             out += "(semua sudah terjual)"
         return out
-    if "notes" in ql or "aroma" in ql or "wangi" in ql:
+    if "notes" in ql or "note" in ql or "aroma" in ql or "wangi" in ql or "parfum" in ql or "parfume" in ql:
         has_name = any(p.nama.lower() in ql for p in produk_list)
         if not has_name:
             clean = ql
-            for w in ["notes", "note", "aroma", "wangi", "parfum", "apa", "saja", "yang", "ini", "dengan", "?"]:
+            for w in ["parfume", "parfum", "notes", "note", "aroma", "wangi", "apa", "saja", "yang", "ini", "dengan", "laris", "terlaris", "hari", "bulan", "minggu", "?"]:
                 clean = clean.replace(w, "")
             clean = clean.strip()
             if clean:
-                cands = [p for p in produk_list if clean in (N.get(p.nama) or "").lower() and G.get(p.nama, "") not in ("", "-")]
+                terms = NOTE_SYNONYMS.get(clean, [clean])
+                cands = [p for p in produk_list if any(tm in (N.get(p.nama) or "").lower() for tm in terms) and G.get(p.nama, "") not in ("", "-")]
                 if cands:
+                    cands = pilih_pool(cands, ql)
                     best = sorted([p for p in cands if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:3]
-                    never = [p for p in cands if terjual.get(p.nama, 0) == 0][:3]
-                    women = [p for p in cands if G.get(p.nama, "").startswith("wanita")][:2]
-                    men = [p for p in cands if G.get(p.nama, "").startswith("pria")][:2]
+                    never = acak([p for p in cands if terjual.get(p.nama, 0) == 0], 3)
+                    women = acak([p for p in cands if G.get(p.nama, "").startswith("wanita")], 2)
+                    men = acak([p for p in cands if G.get(p.nama, "").startswith("pria")], 2)
                     seen = set()
                     final = []
                     for p in best + never + women + men:
@@ -893,11 +968,124 @@ def jawab_ai2(q, db):
                     out = "Parfum dengan notes '" + clean + "':\n"
                     out += "\n".join(str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ", " + str(terjual.get(p.nama, 0)) + " terjual)" for i, p in enumerate(final))
                     return out
+                return "Tidak ditemukan parfum dengan notes: " + clean + ".\nCoba kata lain: vanilla, musk, oud, mawar, kayu manis, citrus, kelapa, kopi, cokelat."
     return jawab_ai(q, db)
 
 
 def daftar_belum_terjual(pool, terjual, n):
-    never = [p for p in pool if terjual.get(p.nama, 0) == 0 and not p.nama.startswith("ARABIC PERFUME") and not p.nama.startswith("CANDY / FRUIT")]
+    never = [p for p in pool if terjual.get(p.nama, 0) == 0]
     if not never:
         return []
     return random.sample(never, min(n, len(never)))
+
+
+NOTE_SYNONYMS = {
+    "cinnamon": ["kayu manis", "cinnamon"],
+    "vanilla": ["vanilla", "vanili"],
+    "rose": ["mawar", "rose"],
+    "jasmine": ["melati", "jasmine"],
+    "sandalwood": ["sandalwood", "sandal", "cendana"],
+    "oud": ["oud"],
+    "musk": ["musk", "misik", "kasturi"],
+    "citrus": ["citrus", "jeruk"],
+    "orange": ["jeruk", "orange"],
+    "coconut": ["kelapa", "coconut"],
+    "coffee": ["kopi", "coffee"],
+    "cherry": ["ceri", "cherry"],
+    "apple": ["apel", "apple"],
+    "pear": ["pir", "pear"],
+    "lavender": ["lavender"],
+    "amber": ["amber"],
+    "caramel": ["karamel", "caramel"],
+    "chocolate": ["cokelat", "chocolate"],
+    "tobacco": ["tembakau", "tobacco"],
+    "leather": ["kulit", "leather"],
+    "tea": ["teh", "tea"],
+    "lychee": ["lychee", "leci"],
+    "peach": ["persik", "peach"],
+    "strawberry": ["stroberi", "strawberry"],
+    "mango": ["mangga", "mango"],
+    "pineapple": ["nanas", "pineapple"],
+    "floral": ["floral", "bunga"],
+    "flower": ["bunga", "floral", "flower"],
+    "woody": ["woody", "kayu"],
+    "fresh": ["segar", "fresh"],
+    "sweet": ["manis", "sweet"],
+    "powder": ["powder", "bedak"],
+    "marine": ["laut", "marine", "aquatic"],
+    "aquatic": ["aquatic", "laut", "marine"],
+    "spicy": ["rempah", "spicy"],
+    "fruity": ["fruity", "buah"],
+}
+
+NOTE_SYNONYMS = {
+    "cinnamon": ["kayu manis", "cinnamon"],
+    "vanilla": ["vanilla", "vanili"],
+    "rose": ["mawar", "rose"],
+    "jasmine": ["melati", "jasmine"],
+    "sandalwood": ["sandalwood", "sandal", "cendana"],
+    "oud": ["oud"],
+    "musk": ["musk", "misik", "kasturi"],
+    "citrus": ["citrus", "jeruk"],
+    "orange": ["jeruk", "orange"],
+    "coconut": ["kelapa", "coconut"],
+    "coffee": ["kopi", "coffee"],
+    "cherry": ["ceri", "cherry"],
+    "apple": ["apel", "apple"],
+    "pear": ["pir", "pear"],
+    "lavender": ["lavender"],
+    "amber": ["amber"],
+    "caramel": ["karamel", "caramel"],
+    "chocolate": ["cokelat", "chocolate"],
+    "tobacco": ["tembakau", "tobacco"],
+    "leather": ["kulit", "leather"],
+    "tea": ["teh", "tea"],
+    "lychee": ["lychee", "leci"],
+    "peach": ["persik", "peach"],
+    "strawberry": ["stroberi", "strawberry"],
+    "mango": ["mangga", "mango"],
+    "pineapple": ["nanas", "pineapple"],
+    "floral": ["floral", "bunga"],
+    "flower": ["bunga", "floral", "flower"],
+    "woody": ["woody", "kayu"],
+    "fresh": ["segar", "fresh"],
+    "sweet": ["manis", "sweet"],
+    "powder": ["powder", "bedak"],
+    "marine": ["laut", "marine", "aquatic"],
+    "aquatic": ["aquatic", "laut", "marine"],
+    "spicy": ["rempah", "spicy"],
+    "fruity": ["fruity", "buah"],
+}
+
+
+
+ARAB_KW = ["arabic", "arabian", "arab", "timur tengah", "ibadah", "sholat", "solat", "sesajen", "syarat", "keris"]
+CANDY_KW = ["permen", "candy"]
+
+def is_arab_q(ql):
+    return any(k in ql for k in ARAB_KW)
+
+def is_candy_q(ql):
+    return any(k in ql for k in CANDY_KW)
+
+def boleh(nama, ql):
+    if nama.startswith("ARABIC PERFUME"):
+        return is_arab_q(ql)
+    if nama.startswith("CANDY / FRUIT"):
+        return is_candy_q(ql)
+    return True
+
+def acak(lst, n):
+    if not lst:
+        return []
+    return random.sample(lst, min(n, len(lst)))
+
+def pilih_pool(pool, ql):
+    if is_arab_q(ql):
+        return [p for p in pool if p.nama.startswith("ARABIC PERFUME")]
+    if is_candy_q(ql):
+        candy = [p for p in pool if p.nama.startswith("CANDY / FRUIT")]
+        others = [p for p in pool if not p.nama.startswith("CANDY / FRUIT") and not p.nama.startswith("ARABIC PERFUME")]
+        return acak(candy, 2) + acak(others, 8)
+    return [p for p in pool if not p.nama.startswith("ARABIC PERFUME") and not p.nama.startswith("CANDY / FRUIT")]
+

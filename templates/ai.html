@@ -7,16 +7,23 @@
     <button type="button" onclick="ask('berapa omset hari ini?')">1. Omzet hari ini</button>
     <button type="button" onclick="ask('produk apa yang harus dijual hari ini?')">2. Harus dijual hari ini</button>
     <button type="button" onclick="ask('produk apa yang laris tetapi hampir habis?')">3. Laris tapi hampir habis</button>
+    <button type="button" onclick="ask('berapa laba hari ini?')">4. Laba hari ini</button>
+    <button type="button" onclick="ask('berapa laba dan margin bulan ini?')">5. Laba bulan ini</button>
+    <button type="button" onclick="ask('produk apa yang tidak laku tapi stok banyak?')">6. Dead stock</button>
+    <button type="button" onclick="ask('apa top 5 terlaris bulan ini?')">7. Top 5 terlaris</button>
+    <button type="button" onclick="ask('omzet minggu ini naik atau turun?')">8. Omzet naik/turun</button>
+    <button type="button" onclick="ask('berapa total qris bulan ini?')">9. Total QRIS</button>
+    <button type="button" onclick="ask('produk apa yang perlu restock?')">10. Perlu restock</button>
   </div>
   <div id="chat" style="max-height:420px;overflow-y:auto;margin-bottom:12px">
     <p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong> Halo! Saya asisten MEKAR SARI.
-Klik tombol 1-3 di atas, atau ketik pertanyaan sendiri (omzet, keuntungan, margin, notes, mirip parfum, parfum pria/wanita).</p>
+Klik tombol 1-10 di atas, atau ketik pertanyaan sendiri (omzet, laba, margin, notes, mirip parfum, parfum pria/wanita).</p>
   </div>
   <form onsubmit="kirim(event)" style="display:flex;gap:10px">
     <input id="q" placeholder="Tulis pertanyaan... contoh: berapa omzet bulanan?" required style="margin:0">
     <button type="submit">Kirim</button>
   </form>
-  <p style="margin-top:10px;color:var(--muted)">Contoh: "omzet bulanan", "keuntungan mingguan", "notes baccarat", "yang mirip sauvage", "parfum cewek apa saja?"</p>
+  <p style="margin-top:10px;color:var(--muted)">Contoh ketik: "omzet bulanan", "notes baccarat", "yang mirip sauvage", "parfum cewek apa saja?"</p>
 </div>
 <script>
 function ask(q){
