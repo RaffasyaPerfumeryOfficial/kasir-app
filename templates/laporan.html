@@ -1,7 +1,18 @@
 ﻿{% extends "base.html" %}
 {% block title %}Laporan{% endblock %}
 {% block content %}
-<div class="topbar"><h2>Laporan Penjualan</h2></div>
+<div class="topbar">
+  <h2>Laporan Penjualan</h2>
+  <a href="/laporan/export"><button type="button">Download Excel (semua)</button></a>
+</div>
+<div class="card" style="margin-bottom:20px">
+  <form method="get" action="/laporan/export" style="display:flex;gap:10px;align-items:center">
+    <input type="date" name="dari" style="margin:0;width:auto">
+    <span>s/d</span>
+    <input type="date" name="sampai" style="margin:0;width:auto">
+    <button type="submit">Download Rentang Ini</button>
+  </form>
+</div>
 <div class="card" style="margin-bottom:20px">
   <p>Total omzet keseluruhan: <strong>Rp {{ "%0.0f"|format(total_omzet) }}</strong></p>
 </div>

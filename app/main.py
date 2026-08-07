@@ -292,3 +292,46 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         },
     )
 
+
+from fastapi.responses import Response
+
+@app.get("/laporan/export")
+def export_laporan(dari: str = "", sampai: str = "", db: Session = Depends(get_db)):
+    from datetime import datetime
+    transaksi_list = db.query(models.Transaksi).order_by(models.Transaksi.id).all()
+    dari_d = None
+    sampai_d = None
+    if dari:
+        dari_d = datetime.strptime(dari, "%Y-%m-%d").date()
+    if sampai:
+        sampai_d = datetime.strptime(sampai, "%Y-%m-%d").date()
+    lines = ["ID;Tanggal;Jam;Items;Total;Bayar;Kembalian"]
+    for t in transaksi_list:
+        d = t.dibuat.date()
+        if dari_d and d < dari_d:
+            continue
+        if sampai_d and d > sampai_d:
+            continue
+        items = json.loads(t.items)
+        items_str = ", ".join(
+            str(i["nama"]) + " x" + str(i["jumlah"]) for i in items
+        )
+        lines.append(
+            ";".join(
+                [
+                    str(t.id),
+                    t.dibuat.strftime("%d/%m/%Y"),
+                    t.dibuat.strftime("%H:%M"),
+                    items_str,
+                    str(int(t.total)),
+                    str(int(t.bayar)),
+                    str(int(t.kembalian)),
+                ]
+            )
+        )
+    content = "\ufeff" + "\n".join(lines)
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=laporan-kasir.csv"},
+    )
