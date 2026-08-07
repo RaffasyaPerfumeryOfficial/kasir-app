@@ -217,7 +217,7 @@ def login_masuk(
     if USERS.get(username) == password:
         sid = secrets.token_hex(16)
         SESSIONS.add(sid)
-        resp = RedirectResponse("/kasir", status_code=303)
+        resp = RedirectResponse("/dashboard", status_code=303)
         resp.set_cookie("session_id", sid)
         return resp
     return templates.TemplateResponse(
@@ -255,3 +255,40 @@ NAMA_TOKO = "MEKAR SARI"
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates.env.globals["nama_toko"] = NAMA_TOKO
+
+@app.get("/dashboard")
+def dashboard(request: Request, db: Session = Depends(get_db)):
+    from datetime import date, timedelta
+    today = date.today()
+    transaksi_list = db.query(models.Transaksi).all()
+    omzet_hari_ini = 0.0
+    transaksi_hari_ini = 0
+    for t in transaksi_list:
+        if t.dibuat and t.dibuat.date() == today:
+            omzet_hari_ini += t.total
+            transaksi_hari_ini += 1
+    terlaris = {}
+    for t in transaksi_list:
+        for it in json.loads(t.items):
+            nama = it["nama"]
+            terlaris[nama] = terlaris.get(nama, 0) + it["jumlah"]
+    top_produk = sorted(terlaris.items(), key=lambda x: x[1], reverse=True)[:5]
+    grafik = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        total = sum(t.total for t in transaksi_list if t.dibuat and t.dibuat.date() == d)
+        grafik.append({"label": d.strftime("%d/%m"), "total": total})
+    max_total = max([g["total"] for g in grafik] + [1])
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "omzet_hari_ini": omzet_hari_ini,
+            "transaksi_hari_ini": transaksi_hari_ini,
+            "jumlah_produk": db.query(models.Produk).count(),
+            "top_produk": top_produk,
+            "grafik": grafik,
+            "max_total": max_total,
+        },
+    )
+

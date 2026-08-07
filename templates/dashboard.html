@@ -1,0 +1,32 @@
+﻿{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="topbar"><h2>Dashboard</h2></div>
+<div class="stat">
+  <div class="card"><h3>Omzet Hari Ini</h3><p>Rp {{ "%0.0f"|format(omzet_hari_ini) }}</p></div>
+  <div class="card"><h3>Transaksi Hari Ini</h3><p>{{ transaksi_hari_ini }}</p></div>
+  <div class="card"><h3>Jumlah Produk</h3><p>{{ jumlah_produk }}</p></div>
+</div>
+<div class="grid" style="margin-top:20px">
+  <div class="card">
+    <h3 style="margin-bottom:16px">Omzet 7 Hari Terakhir</h3>
+    <div style="display:flex;align-items:flex-end;gap:12px;height:190px">
+      {% for g in grafik %}
+      <div style="flex:1;text-align:center">
+        <div style="background:var(--primary);border-radius:6px 6px 0 0;height:{{ (g.total / max_total * 150)|int + 2 }}px"></div>
+        <small>{{ g.label }}</small>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:16px">Produk Terlaris</h3>
+    <table>
+      <tr><th>Produk</th><th>Terjual</th></tr>
+      {% for nama, jumlah in top_produk %}
+      <tr><td>{{ nama }}</td><td>{{ jumlah }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
