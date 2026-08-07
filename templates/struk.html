@@ -23,9 +23,9 @@ body{background:white;margin:0}
 <body>
 <div class="struk">
 <h2>MEKAR SARI</h2>
-<p class="alamat">Jl. Contoh No. 123<br>Telp. 0812-3456-789</p>
+<p class="alamat">Raffasya Perfumery Official</p>
 <hr>
-<p>No: {{ trx.id }}<br>Tanggal: {{ trx.dibuat.strftime('%d/%m/%Y %H:%M') }}</p>
+<p>No: {{ trx.kode_trx or trx.id }}<br>Tanggal: {{ trx.dibuat.strftime('%d/%m/%Y %H:%M') }}<br>Metode: {{ trx.metode or 'TUNAI' }}</p>
 <hr>
 <table>
 {% for it in items %}

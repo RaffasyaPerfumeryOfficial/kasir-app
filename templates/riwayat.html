@@ -1,8 +1,8 @@
 ﻿{% extends "base.html" %}
-{% block title %}Riwayat{% endblock %}
+{% block title %}Transaksi{% endblock %}
 {% block content %}
 <div class="topbar">
-  <h2>Riwayat Transaksi</h2>
+  <h2>Transaksi (per Struk)</h2>
   <span class="badge">{{ jumlah_transaksi }} transaksi</span>
 </div>
 <div class="card" style="margin-bottom:20px">
@@ -10,15 +10,14 @@
 </div>
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Waktu</th><th>Items</th><th>Total</th><th>Bayar</th><th>Kembalian</th><th></th></tr>
+    <tr><th>ID Transaksi</th><th>Waktu</th><th>Metode</th><th>Items</th><th>Total</th><th></th></tr>
     {% for tr in transaksi_list %}
     <tr>
-      <td>{{ tr.id }}</td>
+      <td>{{ tr.kode }}</td>
       <td>{{ tr.dibuat }}</td>
+      <td>{{ tr.metode }}</td>
       <td>{% for it in tr['items'] %}{{ it.nama }} x{{ it.jumlah }}<br>{% endfor %}</td>
       <td>{{ "%0.0f"|format(tr.total) }}</td>
-      <td>{{ "%0.0f"|format(tr.bayar) }}</td>
-      <td>{{ "%0.0f"|format(tr.kembalian) }}</td>
       <td><a href="/struk/{{ tr.id }}">Struk</a></td>
     </tr>
     {% endfor %}

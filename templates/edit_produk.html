@@ -5,10 +5,13 @@
 <div class="card" style="max-width:500px">
   <form method="post" action="/produk/update/{{ produk.id }}">
     <input name="nama" value="{{ produk.nama }}" required>
+    <input name="kode" value="{{ produk.kode or '' }}">
+    <input name="kategori" value="{{ produk.kategori or '' }}">
+    <input name="harga_modal" type="number" value="{{ '%0.0f'|format(produk.harga_modal or 0) }}">
     <input name="harga" type="number" value="{{ '%0.0f'|format(produk.harga) }}" required>
     <input name="stok" type="number" value="{{ produk.stok }}" required>
     <button style="width:100%">Simpan Perubahan</button>
   </form>
-  <p style="margin-top:10px"><a href="/manajemen">Kembali ke Manajemen</a></p>
+  <p style="margin-top:10px"><a href="/manajemen">Kembali ke Produk</a></p>
 </div>
 {% endblock %}

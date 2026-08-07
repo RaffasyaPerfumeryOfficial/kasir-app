@@ -1,0 +1,36 @@
+﻿{% extends "base.html" %}
+{% block title %}Tutup Kasir{% endblock %}
+{% block content %}
+<div class="topbar"><h2>Tutup Kasir Hari Ini</h2></div>
+<div class="stat">
+  <div class="card"><h3>TUNAI menurut sistem</h3><p>Rp {{ "%0.0f"|format(tunai_sistem) }}</p></div>
+  <div class="card"><h3>NON-TUNAI menurut sistem</h3><p>Rp {{ "%0.0f"|format(nontunai_sistem) }}</p></div>
+</div>
+<div class="card" style="margin-top:20px;max-width:520px">
+  <h3 style="margin-bottom:12px">Input Tutup Kasir</h3>
+  <form method="post" action="/tutup">
+    <p style="margin-bottom:6px">Uang NON-TUNAI yang diterima (transfer masuk)</p>
+    <input name="nontunai_input" type="number" required>
+    <p style="margin-bottom:6px">Uang TUNAI yang dihitung (opsional)</p>
+    <input name="tunai_input" type="number" value="0">
+    <button style="width:100%">Tutup Kasir</button>
+  </form>
+</div>
+<div class="card" style="margin-top:20px">
+  <h3 style="margin-bottom:12px">Riwayat Tutup Kasir</h3>
+  <table>
+    <tr><th>Tanggal</th><th>NT Sistem</th><th>NT Input</th><th>Selisih NT</th><th>Tunai Sistem</th><th>Tunai Input</th><th>Selisih Tunai</th></tr>
+    {% for t in riwayat_tutup %}
+    <tr>
+      <td>{{ t.tanggal }}</td>
+      <td>{{ "%0.0f"|format(t.nontunai_sistem) }}</td>
+      <td>{{ "%0.0f"|format(t.nontunai_input) }}</td>
+      <td style="font-weight:700;color:{{ 'var(--danger)' if t.nontunai_selisih < 0 else 'var(--success)' }}">{{ "%0.0f"|format(t.nontunai_selisih) }}</td>
+      <td>{{ "%0.0f"|format(t.tunai_sistem) }}</td>
+      <td>{{ "%0.0f"|format(t.tunai_input) }}</td>
+      <td style="font-weight:700;color:{{ 'var(--danger)' if t.tunai_selisih < 0 else 'var(--success)' }}">{{ "%0.0f"|format(t.tunai_selisih) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

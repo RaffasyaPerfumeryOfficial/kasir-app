@@ -7,22 +7,36 @@
 </div>
 <div class="grid">
   <div class="card">
-    <table>
-      <tr><th>Nama</th><th>Harga</th><th>Stok</th><th></th></tr>
-      {% for p in produk_list %}
-      <tr>
-        <td>{{ p.nama }}</td>
-        <td>{{ "%0.0f"|format(p.harga) }}</td>
-        <td>{{ p.stok }}</td>
-        <td><button onclick="tambah({{ p.id }},'{{ p.nama }}',{{ p.harga }})">+ Tambah</button></td>
-      </tr>
+    <input id="cari" oninput="filter()" placeholder="Cari parfum atau kode...">
+    <select id="kat" onchange="filter()" style="width:100%;padding:10px;margin-bottom:10px;border:1px solid #cbd5e1;border-radius:8px">
+      <option value="">Semua Kategori</option>
+      {% for k in produk_list|map(attribute='kategori')|reject("none")|unique|sort %}
+      <option value="{{ k }}">{{ k }}</option>
       {% endfor %}
-    </table>
+    </select>
+    <div style="max-height:420px;overflow-y:auto">
+      <table>
+        <tr><th>Kode</th><th>Nama</th><th>Harga</th><th>Stok</th><th></th></tr>
+        <tbody id="tbody">
+        {% for p in produk_list %}
+        <tr data-nama="{{ (p.nama or '')|upper }} {{ (p.kode or '')|upper }}" data-kategori="{{ p.kategori or '' }}">
+          <td>{{ p.kode or '' }}</td>
+          <td>{{ p.nama }}</td>
+          <td>{{ "%0.0f"|format(p.harga) }}</td>
+          <td>{{ p.stok }}</td>
+          <td><button onclick="tambah({{ p.id }},'{{ p.nama }}',{{ p.harga }})">+</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
   <div class="card">
     <h3>Keranjang</h3>
     <ul id="cart" style="list-style:none;margin:12px 0"></ul>
     <p style="margin:10px 0">Total: Rp <span id="total">0</span></p>
+    <label style="display:block;margin:6px 0"><input type="radio" name="metode" value="TUNAI" checked style="width:auto"> TUNAI</label>
+    <label style="display:block;margin:6px 0"><input type="radio" name="metode" value="NON-TUNAI" style="width:auto"> NON-TUNAI (transfer/QRIS)</label>
     <input id="bayar" type="number" placeholder="Uang bayar">
     <button onclick="bayar()" style="width:100%">Bayar</button>
     <p style="margin-top:10px">Kembalian: Rp <span id="kembalian">0</span></p>
@@ -40,10 +54,21 @@ let ul=document.getElementById('cart');ul.innerHTML='';let t=0;
 cart.forEach(i=>{t+=i.harga*i.jumlah;let li=document.createElement('li');li.textContent=i.nama+' x'+i.jumlah+' = '+i.harga*i.jumlah;ul.appendChild(li);});
 document.getElementById('total').textContent=t;
 }
+function filter(){
+const q=document.getElementById('cari').value.toUpperCase();
+const k=document.getElementById('kat').value;
+document.querySelectorAll('#tbody tr').forEach(tr=>{
+const okN=tr.dataset.nama.includes(q);
+const okK=!k||tr.dataset.kategori===k;
+tr.style.display=(okN&&okK)?'':'none';
+});
+}
 function bayar(){
-let b=parseFloat(document.getElementById('bayar').value||0);
+const metode=document.querySelector('input[name=metode]:checked').value;
+let t=0;cart.forEach(i=>{t+=i.harga*i.jumlah});
+let b=metode==='TUNAI'?parseFloat(document.getElementById('bayar').value||0):t;
 fetch('/transaksi',{method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({items:cart.map(i=>({produk_id:i.id,jumlah:i.jumlah})),bayar:b})})
+body:JSON.stringify({items:cart.map(i=>({produk_id:i.id,jumlah:i.jumlah})),bayar:b,metode:metode})})
 .then(r=>r.json()).then(d=>{
 if(d.kembalian!==undefined){window.location.href='/struk/'+d.id;}
 else{alert(JSON.stringify(d.detail||d));}

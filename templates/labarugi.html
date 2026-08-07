@@ -1,0 +1,38 @@
+﻿{% extends "base.html" %}
+{% block title %}Laba Rugi{% endblock %}
+{% block content %}
+<div class="topbar"><h2>Laba Rugi</h2></div>
+<div class="grid">
+  <div class="card">
+    <h3 style="margin-bottom:12px">Klik Pengeluaran</h3>
+    <form method="post" action="/pengeluaran">
+      <input name="keterangan" placeholder="Keterangan (misal: beli botol, listrik)" required>
+      <input name="jumlah" type="number" placeholder="Jumlah (Rp)" required>
+      <button class="btn-danger" style="width:100%">Catat Pengeluaran</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:12px">Filter Tanggal</h3>
+    <form method="get" action="/labarugi" style="display:flex;gap:10px;align-items:center">
+      <input type="date" name="dari" value="{{ dari }}" style="margin:0">
+      <span>s/d</span>
+      <input type="date" name="sampai" value="{{ sampai }}" style="margin:0">
+      <button type="submit">Tampilkan</button>
+    </form>
+  </div>
+</div>
+<div class="card" style="margin-top:20px">
+  <table>
+    <tr><th>Tanggal</th><th>Omzet</th><th>Modal</th><th>Pengeluaran</th><th>Laba</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.tanggal }}</td>
+      <td>{{ "%0.0f"|format(r.omzet) }}</td>
+      <td>{{ "%0.0f"|format(r.modal) }}</td>
+      <td>{{ "%0.0f"|format(r.pengeluaran) }}</td>
+      <td style="color:{{ 'var(--danger)' if r.laba < 0 else 'var(--success)' }};font-weight:700">{{ "%0.0f"|format(r.laba) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,38 +1,49 @@
 ﻿{% extends "base.html" %}
-{% block title %}Manajemen{% endblock %}
+{% block title %}Produk{% endblock %}
 {% block content %}
 <div class="topbar">
   <h2>Manajemen Produk</h2>
   <span class="badge">{{ produk_list|length }} produk</span>
 </div>
-<div class="card" style="margin-bottom:20px;border-left:4px solid var(--danger)"><h3>Stok Menipis (&lt; 10)</h3><p style="margin-top:6px">{% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}{% if rendah %}{{ rendah|map(attribute="nama")|join(", ") }}{% else %}Semua stok aman{% endif %}</p></div><div class="grid">
+<div class="card" style="margin-bottom:20px;border-left:4px solid var(--danger)">
+  <h3>Stok Menipis (&lt; 10)</h3>
+  <p style="margin-top:6px">{% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}{% if rendah %}{{ rendah|map(attribute="nama")|join(", ") }}{% else %}Semua stok aman{% endif %}</p>
+</div>
+<div class="grid">
   <div class="card">
-    <table>
-      <tr><th>Nama</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr>
-      {% for p in produk_list %}
-      <tr>
-        <td>{{ p.nama }}</td>
-        <td>{{ "%0.0f"|format(p.harga) }}</td>
-        <td>{{ p.stok }}</td>
-        <td>
-          <a href="/produk/edit/{{ p.id }}">Edit</a>
-          <form method="post" action="/produk/hapus/{{ p.id }}" style="display:inline" onsubmit="return confirm('Hapus produk ini?')">
-            <button class="btn-danger" type="submit">Hapus</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
+    <div style="max-height:480px;overflow-y:auto">
+      <table>
+        <tr><th>Kode</th><th>Nama</th><th>Kategori</th><th>Modal</th><th>Jual</th><th>Stok</th><th>Aksi</th></tr>
+        {% for p in produk_list %}
+        <tr>
+          <td>{{ p.kode or '' }}</td>
+          <td>{{ p.nama }}</td>
+          <td>{{ p.kategori or '' }}</td>
+          <td>{{ "%0.0f"|format(p.harga_modal or 0) }}</td>
+          <td>{{ "%0.0f"|format(p.harga) }}</td>
+          <td>{{ p.stok }}</td>
+          <td>
+            <a href="/produk/edit/{{ p.id }}">Edit</a>
+            <form method="post" action="/produk/hapus/{{ p.id }}" style="display:inline" onsubmit="return confirm('Hapus produk ini?')">
+              <button class="btn-danger" type="submit">Hapus</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
   </div>
   <div class="card">
     <h3 style="margin-bottom:12px">Tambah Produk</h3>
     <form method="post" action="/produk/simpan">
       <input name="nama" placeholder="Nama produk" required>
-      <input name="harga" type="number" placeholder="Harga" required>
+      <input name="kode" placeholder="Kode">
+      <input name="kategori" placeholder="Kategori">
+      <input name="harga_modal" type="number" placeholder="Harga modal">
+      <input name="harga" type="number" placeholder="Harga jual" required>
       <input name="stok" type="number" placeholder="Stok" required>
       <button style="width:100%">Simpan</button>
     </form>
   </div>
 </div>
 {% endblock %}
-
