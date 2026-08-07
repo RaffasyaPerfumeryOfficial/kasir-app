@@ -1356,3 +1356,15 @@ def format_notes(s):
         return s
     return s.replace(" | ", "\n").replace("TOP: ", "Top notes: ").replace("MID: ", "Middle notes: ").replace("BASE: ", "Base notes: ").replace("ACCORD: ", "Main accords: ")
 
+
+@app.get("/produk/fetch_notes/{produk_id}")
+def fetch_notes_online(produk_id: int, db: Session = Depends(get_db)):
+    from app import fragella
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    text, err = fragella.cari_notes_online(produk.nama)
+    if err:
+        return {"ok": False, "pesan": err}
+    N[produk.nama] = text
+    return {"ok": True, "notes": text}

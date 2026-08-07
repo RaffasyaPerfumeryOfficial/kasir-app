@@ -13,5 +13,25 @@
     <button style="width:100%">Simpan Perubahan</button>
   </form>
   <p style="margin-top:10px"><a href="/manajemen">Kembali ke Produk</a></p>
+  <hr style="margin:16px 0">
+  <h4>🌐 Ambil Notes dari Fragella</h4>
+  <p style="color:var(--muted);font-size:13px">Klik untuk mengambil piramida TOP/MID/BASE + accords dari database global 74.000+ parfum. Biaya ± Rp 82 / klik.</p>
+  <button type="button" id="btnFetch" onclick="ambilNotes()" style="background:#2563eb">Ambil Notes Online</button>
+  <div id="fetchResult" style="margin-top:10px;white-space:pre-line"></div>
 </div>
+<script>
+function ambilNotes(){
+const btn=document.getElementById('btnFetch');
+const out=document.getElementById('fetchResult');
+btn.disabled=true;btn.textContent='Memuat...';out.textContent='';
+fetch('/produk/fetch_notes/{{ produk.id }}').then(r=>r.json()).then(d=>{
+if(d.ok){
+out.innerHTML='<strong style="color:var(--success)">Berhasil!</strong>\n'+d.notes.replace(/\|/g,'\n');
+}else{
+out.innerHTML='<span style="color:var(--danger)">'+d.pesan+'</span>';
+}
+btn.disabled=false;btn.textContent='Ambil Notes Online';
+});
+}
+</script>
 {% endblock %}
