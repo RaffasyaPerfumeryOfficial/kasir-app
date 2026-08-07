@@ -21,25 +21,27 @@
   </div>
   <div id="chat" style="max-height:420px;overflow-y:auto;margin-bottom:12px"></div>
   <form onsubmit="kirim(event)" style="display:flex;gap:10px">
-    <input id="q" placeholder="Tulis pertanyaan... contoh: berapa omzet bulanan?" required style="margin:0">
+    <input id="q" placeholder="Tulis pertanyaan... contoh: still dari brand apa?" required style="margin:0">
     <button type="submit">Kirim</button>
   </form>
-  <p style="margin-top:10px;color:var(--muted)">Percakapan tersimpan otomatis di database. Klik "Riwayat Percakapan" untuk melihat histori lengkap.</p>
+  <p style="margin-top:10px;color:var(--muted)">AI mengingat konteks: setelah tanya produk, lanjutkan dengan "notesnya apa?", "ada yang lainnya?", atau "ya".</p>
 </div>
 <script>
+let lastProduk='';
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function addAnda(q){document.getElementById('chat').innerHTML+='<p style="background:#e0e7ff;padding:10px;border-radius:8px;margin:8px 0"><strong>Anda:</strong> '+esc(q)+'</p>';}
 function addAI(a){document.getElementById('chat').innerHTML+='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong>\n'+esc(a)+'</p>';}
 function salam(){document.getElementById('chat').innerHTML='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong> Halo! Saya asisten MEKAR SARI.\nKlik tombol 1-10 atau ketik pertanyaan. Percakapan tersimpan otomatis.</p>';}
 function ask(q){
 addAnda(q);
-fetch('/ai/jawab?q='+encodeURIComponent(q)).then(r=>r.json()).then(d=>{
+fetch('/ai/jawab?q='+encodeURIComponent(q)+'&ctx='+encodeURIComponent(lastProduk)).then(r=>r.json()).then(d=>{
+if(d.produk){lastProduk=d.produk;}
 addAI(d.jawab);
 const c=document.getElementById('chat');c.scrollTop=c.scrollHeight;
 });
 }
 function kirim(e){e.preventDefault();ask(document.getElementById('q').value);document.getElementById('q').value='';}
-function mulaiBaru(){salam();}
+function mulaiBaru(){salam();lastProduk='';}
 function lihatRiwayat(){
 fetch('/ai/riwayat').then(r=>r.json()).then(d=>{
 const c=document.getElementById('chat');c.innerHTML='';

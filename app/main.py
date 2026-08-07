@@ -671,7 +671,8 @@ def jawab_ai(q, db):
     if "notes" in q or "aroma" in q or "wangi" in q:
         t2 = cari_produk(q, produk_list)
         if t2:
-            return t2.nama + ":\n" + (N.get(t2.nama) or "Data notes belum ada untuk produk ini.")
+            short2 = t2.nama.split(" - ")[1] if " - " in t2.nama else t2.nama
+            return t2.nama + ":\n" + (N.get(t2.nama) or "Data notes belum ada untuk produk ini.") + "\n\nMau saya carikan parfum dengan notes menyerupai " + short2 + "? Jawab: ya"
         return "Produk tidak ditemukan. Contoh pertanyaan: notes AFNAN - 9PM"
     if "laris" in q:
         hit = {}
@@ -754,11 +755,13 @@ def halaman_ai(request: Request):
 
 
 @app.get("/ai/jawab")
-def ai_jawab(q: str, db: Session = Depends(get_db)):
-    j = jawab_ai2(q, db)
+def ai_jawab(q: str, ctx: str = "", db: Session = Depends(get_db)):
+    j = jawab_ai2(q, db, ctx)
+    t = cari_produk(q, db.query(models.Produk).all())
+    prod = t.nama if t else ctx
     db.add(models.PesanAI(pertanyaan=q, jawaban=j))
     db.commit()
-    return {"jawab": j}
+    return {"jawab": j, "produk": prod}
 
 
 @app.get("/ai/riwayat")
@@ -772,7 +775,7 @@ def ai_riwayat(n: int = 300, db: Session = Depends(get_db)):
 
 
 
-def jawab_ai2(q, db):
+def jawab_ai2(q, db, ctx=""):
     ql = (q or "").lower()
     transaksi_list = db.query(models.Transaksi).all()
     produk_list = db.query(models.Produk).all()
@@ -781,33 +784,46 @@ def jawab_ai2(q, db):
     for t in transaksi_list:
         for it in json.loads(t.items):
             terjual[it["nama"]] = terjual.get(it["nama"], 0) + it["jumlah"]
+    if ql.strip() in ["ya", "iya", "y", "yes", "mau", "boleh", "ok", "oke"] and ctx:
+        tgt = None
+        for p in produk_list:
+            if p.nama == ctx:
+                tgt = p
+                break
+        if tgt:
+            return jawab_mirip(tgt, produk_list)
+    if ctx and ("notes" in ql or "aroma" in ql or "wangi" in ql) and "apa saja" not in ql and cari_produk(ql, produk_list) is None:
+        tgt = None
+        for p in produk_list:
+            if p.nama == ctx:
+                tgt = p
+                break
+        if tgt:
+            short = tgt.nama.split(" - ")[1] if " - " in tgt.nama else tgt.nama
+            return tgt.nama + ":\nNotes: " + (N.get(tgt.nama) or "-") + "\n\nMau saya carikan parfum dengan notes menyerupai " + short + "? Jawab: ya"
     if "mirip" in ql or "serupa" in ql or "menyerupai" in ql:
         target = cari_produk(ql, produk_list)
         if not target:
             return "Sebutkan nama parfumnya. Contoh: yang mirip sauvage"
-        my_notes = (N.get(target.nama) or "").lower()
-        tokens = set(w for w in re.split("[^a-z]+", my_notes) if len(w) > 3)
-        scores = []
-        for p in produk_list:
-            if p.nama == target.nama:
-                continue
-            other = (N.get(p.nama) or "").lower()
-            if not other:
-                continue
-            ot = set(w for w in re.split("[^a-z]+", other) if len(w) > 3)
-            common = len(tokens & ot)
-            if common > 0:
-                scores.append((common, p))
-        scores.sort(key=lambda x: x[0], reverse=True)
-        top = scores[:5]
-        if not top:
-            return "Tidak ditemukan parfum mirip " + target.nama + "."
-        out = "Mirip " + target.nama + ":\n"
-        for i, (s, p) in enumerate(top):
-            out += str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ")\n"
-        return out
+        return jawab_mirip(target, produk_list)
     target = cari_produk(ql, produk_list)
+    if target is None and ctx and any(k in ql for k in ["notes", "note", "aroma", "wangi", "brand", "merk", "merek", "stok", "harga", "modal", "jual", "untung", "kode", "kategori", "gender", "lain"]):
+        for p in produk_list:
+            if p.nama == ctx:
+                target = p
+                break
     if target and not ("notes" in ql or "aroma" in ql or "wangi" in ql):
+        if "brand" in ql or "merk" in ql or "merek" in ql:
+            short = target.nama.split(" - ")[1] if " - " in target.nama else target.nama
+            brand = target.nama.split(" - ")[0] if " - " in target.nama else (target.kode or "-")
+            return short + " dari brand/merk: " + brand
+        if "lain" in ql:
+            brand = target.nama.split(" - ")[0] if " - " in target.nama else None
+            if brand:
+                others = acak([p for p in produk_list if p.nama.startswith(brand + " -") and p.nama != target.nama], 5)
+                if others:
+                    return "Produk lain dari " + brand + ":\n" + "\n".join(str(i + 1) + ". " + p.nama for i, p in enumerate(others))
+            return "Tidak ada produk lain dari brand ini."
         if "stok" in ql or "sisa" in ql or "tersisa" in ql:
             return "Stok " + target.nama + ": " + str(target.stok or 0)
         if "modal" in ql or "grosir" in ql:
@@ -1168,3 +1184,26 @@ def cari_produk(ql, produk_list):
     if best_score >= 0.8:
         return best
     return None
+
+def jawab_mirip(tgt, produk_list):
+    my_notes = (N.get(tgt.nama) or "").lower()
+    tokens = set(w for w in re.split("[^a-z]+", my_notes) if len(w) > 3)
+    scores = []
+    for p in produk_list:
+        if p.nama == tgt.nama:
+            continue
+        other = (N.get(p.nama) or "").lower()
+        if not other:
+            continue
+        ot = set(w for w in re.split("[^a-z]+", other) if len(w) > 3)
+        common = len(tokens & ot)
+        if common > 0:
+            scores.append((common, p))
+    scores.sort(key=lambda x: x[0], reverse=True)
+    top = scores[:5]
+    if not top:
+        return "Tidak ditemukan parfum mirip " + tgt.nama + "."
+    out = "Notes menyerupai " + tgt.nama + ":\n"
+    for i, (s, p) in enumerate(top):
+        out += str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ")\n"
+    return out
