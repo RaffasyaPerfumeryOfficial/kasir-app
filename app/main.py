@@ -636,3 +636,117 @@ def buat_saran(db):
     if not saran:
         saran.append(("success", "Semua indikator bagus. Pertahankan!"))
     return saran
+
+def hitung_range(d1, d2, transaksi_list, pengeluaran_list):
+    omzet = 0.0
+    modal = 0.0
+    keluar = 0.0
+    for t in transaksi_list:
+        if t.dibuat and d1 <= t.dibuat.date() <= d2:
+            omzet += t.total
+            modal += t.total_modal or 0.0
+    for p in pengeluaran_list:
+        if d1 <= p.dibuat.date() <= d2:
+            keluar += p.jumlah
+    laba = omzet - modal - keluar
+    margin = (laba / omzet * 100) if omzet else 0.0
+    return omzet, modal, keluar, laba, margin
+
+
+def rp(x):
+    return "Rp " + format(int(round(x)), ",").replace(",", ".")
+
+
+def jawab_ai(q, db):
+    q = (q or "").lower()
+    today = date.today()
+    transaksi_list = db.query(models.Transaksi).all()
+    pengeluaran_list = db.query(models.Pengeluaran).all()
+    produk_list = db.query(models.Produk).all()
+    bibit = [p for p in produk_list if (p.kategori or "") == "BIBIT"]
+    nama_bibit = set(p.nama for p in bibit)
+    if "laris" in q:
+        hit = {}
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() == today:
+                for it in json.loads(t.items):
+                    if it["nama"] in nama_bibit:
+                        hit[it["nama"]] = hit.get(it["nama"], 0) + it["jumlah"]
+        if hit:
+            top = sorted(hit.items(), key=lambda x: x[1], reverse=True)[:5]
+            return "Laris hari ini (BIBIT):\n" + "\n".join(str(i + 1) + ". " + n + " (" + str(v) + " terjual)" for i, (n, v) in enumerate(top))
+        return "Belum ada penjualan BIBIT hari ini.\nCoba tawarkan:\n" + "\n".join(str(i + 1) + ". " + p.nama for i, p in enumerate(bibit[:3]))
+    if "harus terjual" in q or "rekomendasi" in q or "jual hari ini" in q or "apa yang harus" in q:
+        month_start = today.replace(day=1)
+        hit = {}
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() >= month_start:
+                for it in json.loads(t.items):
+                    if it["nama"] in nama_bibit:
+                        hit[it["nama"]] = hit.get(it["nama"], 0) + it["jumlah"]
+        terlaris = sorted(hit.items(), key=lambda x: x[1], reverse=True)[:3]
+        margin_top = sorted(bibit, key=lambda p: p.harga - (p.harga_modal or 0), reverse=True)[:3]
+        j = "Fokus jual hari ini (BIBIT):"
+        if terlaris:
+            j += "\nLaris bulan ini:\n" + "\n".join(str(i + 1) + ". " + n + " (" + str(v) + " terjual)" for i, (n, v) in enumerate(terlaris))
+        j += "\nUntung terbesar per pcs:\n" + "\n".join(str(i + 1) + ". " + p.nama + " (" + rp(p.harga - (p.harga_modal or 0)) + ")" for i, p in enumerate(margin_top))
+        return j
+    period = None
+    if "harian" in q or "hari ini" in q:
+        period = "harian"
+    elif "mingguan" in q or "minggu" in q:
+        period = "mingguan"
+    elif "bulanan" in q or "bulan" in q:
+        period = "bulanan"
+    elif "tahunan" in q or "tahun" in q:
+        period = "tahunan"
+    topics = []
+    if "omzet" in q or "omset" in q or "penjualan" in q:
+        topics.append("omzet")
+    if "untung" in q or "laba" in q or "keuntungan" in q:
+        topics.append("laba")
+    if "modal" in q:
+        topics.append("modal")
+    if "margin" in q:
+        topics.append("margin")
+    if not topics:
+        topics = ["omzet", "modal", "laba", "margin"]
+    periods = [period] if period else ["harian", "mingguan", "bulanan", "tahunan"]
+    lines = []
+    for per in periods:
+        if per == "harian":
+            d1 = today
+            label = "hari ini"
+        elif per == "mingguan":
+            d1 = today - timedelta(days=6)
+            label = "7 hari terakhir"
+        elif per == "bulanan":
+            d1 = today.replace(day=1)
+            label = "bulan ini"
+        else:
+            d1 = today.replace(month=1, day=1)
+            label = "tahun ini"
+        omzet, modal, keluar, laba, margin = hitung_range(d1, today, transaksi_list, pengeluaran_list)
+        parts = []
+        if "omzet" in topics:
+            parts.append("omzet " + rp(omzet))
+        if "modal" in topics:
+            parts.append("modal " + rp(modal))
+        if "laba" in topics:
+            parts.append("keuntungan " + rp(laba))
+        if "margin" in topics:
+            parts.append("margin " + str(int(margin)) + "%")
+        lines.append(label + ": " + ", ".join(parts))
+    return "\n".join(lines)
+
+
+@app.get("/ai")
+def halaman_ai(request: Request):
+    return templates.TemplateResponse(request, "ai.html", {})
+
+
+@app.get("/ai/jawab")
+def ai_jawab(q: str, db: Session = Depends(get_db)):
+    return {"jawab": jawab_ai(q, db)}
+
+

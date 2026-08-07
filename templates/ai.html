@@ -1,0 +1,29 @@
+﻿{% extends "base.html" %}
+{% block title %}Pesan AI{% endblock %}
+{% block content %}
+<div class="topbar"><h2>Pesan AI</h2></div>
+<div class="card" style="max-width:720px">
+  <div id="chat" style="max-height:420px;overflow-y:auto;margin-bottom:12px">
+    <p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong> Halo! Saya asisten MEKAR SARI.
+Tanyakan omzet / keuntungan / modal / margin (harian, mingguan, bulanan, tahunan), atau produk BIBIT yang laris.</p>
+  </div>
+  <form onsubmit="kirim(event)" style="display:flex;gap:10px">
+    <input id="q" placeholder="Tulis pertanyaan... contoh: berapa omzet bulanan?" required style="margin:0">
+    <button type="submit">Kirim</button>
+  </form>
+  <p style="margin-top:10px;color:var(--muted)">Contoh: "omzet harian", "keuntungan mingguan", "margin tahunan", "apa yang laris hari ini?", "apa yang harus terjual hari ini?"</p>
+</div>
+<script>
+function kirim(e){
+e.preventDefault();
+const q=document.getElementById('q').value;
+const chat=document.getElementById('chat');
+chat.innerHTML+='<p style="background:#e0e7ff;padding:10px;border-radius:8px;margin:8px 0"><strong>Anda:</strong> '+q+'</p>';
+fetch('/ai/jawab?q='+encodeURIComponent(q)).then(r=>r.json()).then(d=>{
+chat.innerHTML+='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong>\n'+d.jawab+'</p>';
+chat.scrollTop=chat.scrollHeight;
+});
+document.getElementById('q').value='';
+}
+</script>
+{% endblock %}
