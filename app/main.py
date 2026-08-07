@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 import random
 import secrets
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.notes_data import N
 from app.gender_data import G
+from app.pembulatan import bulat_harga
 from app.db import Base, SessionLocal, engine, get_db
 
 Base.metadata.create_all(bind=engine)
@@ -119,7 +120,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     mode = request.query_params.get("mode", "7")
     dari_s = request.query_params.get("dari", "")
     sampai_s = request.query_params.get("sampai", "")
-    transaksi_list = db.query(models.Transaksi).all()
+    transaksi_list = transaksi_valid(db)
     omzet_hari_ini = 0.0
     transaksi_hari_ini = 0
     tunai_total = 0.0
@@ -189,11 +190,37 @@ def halaman_kasir(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "kasir.html", {"produk_list": produk_list})
 
 
+def filter_transaksi(semua, flt, dari, sampai, q):
+    today = date.today()
+    out = []
+    for t in semua:
+        d = t.dibuat.date()
+        if flt == "HARI" and d != today:
+            continue
+        if flt == "KEMARIN" and d != today - timedelta(days=1):
+            continue
+        if flt == "KOSTUM":
+            d1 = parse_date(dari)
+            d2 = parse_date(sampai)
+            if d1 and d < d1:
+                continue
+            if d2 and d > d2:
+                continue
+        if flt == "BULAN" and dari:
+            if t.dibuat.strftime("%Y-%m") != dari[:7]:
+                continue
+        if q:
+            kode = (t.kode_trx or ("TRX-" + str(t.id))).upper()
+            if q.upper() not in kode:
+                continue
+        out.append(t)
+    return out
+
+
 @app.get("/riwayat")
-def riwayat_transaksi(request: Request, db: Session = Depends(get_db)):
-    transaksi_list = (
-        db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all()
-    )
+def riwayat_transaksi(request: Request, filter: str = "", dari: str = "", sampai: str = "", q: str = "", db: Session = Depends(get_db)):
+    semua = db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all()
+    transaksi_list = filter_transaksi(semua, filter, dari, sampai, q)
     data = []
     for t in transaksi_list:
         data.append(
@@ -206,9 +233,10 @@ def riwayat_transaksi(request: Request, db: Session = Depends(get_db)):
                 "total": t.total,
                 "bayar": t.bayar,
                 "kembalian": t.kembalian,
+                "void": t.void or 0,
             }
         )
-    total_penjualan = sum(t.total for t in transaksi_list)
+    total_penjualan = sum(x["total"] for x in data if not x["void"])
     return templates.TemplateResponse(
         request,
         "riwayat.html",
@@ -216,8 +244,59 @@ def riwayat_transaksi(request: Request, db: Session = Depends(get_db)):
             "transaksi_list": data,
             "total_penjualan": total_penjualan,
             "jumlah_transaksi": len(data),
+            "filter": filter,
+            "dari": dari,
+            "sampai": sampai,
+            "q": q,
         },
     )
+
+
+@app.get("/riwayat/export")
+def riwayat_export(filter: str = "", dari: str = "", sampai: str = "", q: str = "", db: Session = Depends(get_db)):
+    semua = sorted(transaksi_valid(db), key=lambda t: t.id)
+    transaksi_list = filter_transaksi(semua, filter, dari, sampai, q)
+    lines = ["ID;Kode;Waktu;Metode;Items;Total;Diskon;Bayar;Kembalian"]
+    for t in transaksi_list:
+        items = json.loads(t.items)
+        items_str = ", ".join(str(i["nama"]) + " x" + str(i["jumlah"]) for i in items)
+        lines.append(
+            ";".join(
+                [
+                    str(t.id),
+                    t.kode_trx or "",
+                    t.dibuat.strftime("%d/%m/%Y %H:%M"),
+                    t.metode or "TUNAI",
+                    items_str,
+                    str(int(t.total)),
+                    str(int(t.total_diskon or 0)),
+                    str(int(t.bayar)),
+                    str(int(t.kembalian)),
+                ]
+            )
+        )
+    content = "\ufeff" + "\n".join(lines)
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transaksi.csv"},
+    )
+
+
+@app.post("/transaksi/void/{trx_id}")
+def void_transaksi(trx_id: int, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+    if t.void:
+        return RedirectResponse("/riwayat", status_code=303)
+    t.void = 1
+    for it in json.loads(t.items):
+        p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+        if p:
+            p.stok = (p.stok or 0) + it["jumlah"]
+    db.commit()
+    return RedirectResponse("/riwayat", status_code=303)
 
 
 @app.get("/struk/{trx_id}")
@@ -367,7 +446,7 @@ def buat_transaksi(t: TransaksiCreate, db: Session = Depends(get_db)):
 
 @app.get("/laporan")
 def laporan_harian(request: Request, db: Session = Depends(get_db)):
-    transaksi_list = db.query(models.Transaksi).all()
+    transaksi_list = transaksi_valid(db)
     rekap = {}
     for t in transaksi_list:
         key = t.dibuat.date()
@@ -389,7 +468,7 @@ def laporan_harian(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/laporan/export")
 def export_laporan(dari: str = "", sampai: str = "", db: Session = Depends(get_db)):
-    transaksi_list = db.query(models.Transaksi).order_by(models.Transaksi.id).all()
+    transaksi_list = sorted(transaksi_valid(db), key=lambda t: t.id)
     dari_d = parse_date(dari)
     sampai_d = parse_date(sampai)
     lines = ["ID;Kode;Tanggal;Jam;Metode;Items;Total;Diskon;Bayar;Kembalian"]
@@ -430,7 +509,7 @@ def labarugi(request: Request, dari: str = "", sampai: str = "", db: Session = D
     dari_d = parse_date(dari)
     sampai_d = parse_date(sampai)
     rekap = {}
-    for t in db.query(models.Transaksi).all():
+    for t in transaksi_valid(db):
         d = t.dibuat.date()
         if dari_d and d < dari_d:
             continue
@@ -464,7 +543,7 @@ def labarugi(request: Request, dari: str = "", sampai: str = "", db: Session = D
         tot_pengeluaran += r["pengeluaran"]
     tot_laba = tot_omzet - tot_modal - tot_pengeluaran
     bulan = {}
-    for t in db.query(models.Transaksi).all():
+    for t in transaksi_valid(db):
         key = t.dibuat.strftime("%Y-%m")
         b = bulan.setdefault(key, {"bulan": key, "omzet": 0.0, "modal": 0.0, "pengeluaran": 0.0})
         b["omzet"] += t.total
@@ -508,7 +587,7 @@ def tambah_pengeluaran(
 def halaman_tutup(request: Request, db: Session = Depends(get_db)):
     tunai_sistem = 0.0
     nontunai_sistem = 0.0
-    for t in db.query(models.Transaksi).all():
+    for t in transaksi_valid(db):
         if t.dibuat and t.dibuat.date() == date.today():
             tunai_sistem += t.p_tunai or 0.0
             nontunai_sistem += t.p_nontunai or 0.0
@@ -532,7 +611,7 @@ def proses_tutup(
 ):
     tunai_sistem = 0.0
     nontunai_sistem = 0.0
-    for t in db.query(models.Transaksi).all():
+    for t in transaksi_valid(db):
         if t.dibuat and t.dibuat.date() == date.today():
             tunai_sistem += t.p_tunai or 0.0
             nontunai_sistem += t.p_nontunai or 0.0
@@ -572,7 +651,7 @@ def buat_saran(db):
     saran = []
     today = date.today()
     produk_list = db.query(models.Produk).all()
-    transaksi_list = db.query(models.Transaksi).all()
+    transaksi_list = transaksi_valid(db)
     month_start = today.replace(day=1)
     habis = [p for p in produk_list if (p.stok or 0) == 0]
     if habis:
@@ -663,7 +742,7 @@ def rp(x):
 def jawab_ai(q, db):
     q = (q or "").lower()
     today = date.today()
-    transaksi_list = db.query(models.Transaksi).all()
+    transaksi_list = transaksi_valid(db)
     pengeluaran_list = db.query(models.Pengeluaran).all()
     produk_list = db.query(models.Produk).all()
     bibit = [p for p in produk_list if (p.kategori or "") == "BIBIT"]
@@ -777,7 +856,7 @@ def ai_riwayat(n: int = 300, db: Session = Depends(get_db)):
 
 def jawab_ai2(q, db, ctx=""):
     ql = (q or "").lower()
-    transaksi_list = db.query(models.Transaksi).all()
+    transaksi_list = transaksi_valid(db)
     produk_list = db.query(models.Produk).all()
     pengeluaran_list = db.query(models.Pengeluaran).all()
     terjual = {}
@@ -1207,3 +1286,48 @@ def jawab_mirip(tgt, produk_list):
     for i, (s, p) in enumerate(top):
         out += str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ")\n"
     return out
+
+
+def cocok_scope(p, scope, nilai):
+    v = (nilai or "").strip().upper()
+    if scope == "SEMUA":
+        return True
+    if scope == "KODE":
+        return (p.kode or "").upper() == v
+    if scope == "KATEGORI":
+        return (p.kategori or "").upper() == v
+    return False
+
+
+@app.post("/harga/preview")
+def harga_preview(
+    scope: str = Form(...),
+    nilai: str = Form(""),
+    persen: float = Form(0),
+    db: Session = Depends(get_db),
+):
+    rows = []
+    for p in db.query(models.Produk).all():
+        if cocok_scope(p, scope, nilai):
+            baru = bulat_harga((p.harga or 0) * (100 + persen) / 100)
+            rows.append({"nama": p.nama, "lama": p.harga, "baru": baru})
+    return {"rows": rows[:20], "total": len(rows)}
+
+
+@app.post("/harga/terapkan")
+def harga_terapkan(
+    scope: str = Form(...),
+    nilai: str = Form(""),
+    persen: float = Form(0),
+    db: Session = Depends(get_db),
+):
+    n = 0
+    for p in db.query(models.Produk).all():
+        if cocok_scope(p, scope, nilai):
+            p.harga = float(bulat_harga((p.harga or 0) * (100 + persen) / 100))
+            n += 1
+    db.commit()
+    return {"n": n}
+
+def transaksi_valid(db):
+    return db.query(models.Transaksi).filter((models.Transaksi.void == None) | (models.Transaksi.void == 0)).all()

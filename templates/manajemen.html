@@ -5,6 +5,21 @@
   <h2>Manajemen Produk</h2>
   <span class="badge">{{ produk_list|length }} produk</span>
 </div>
+<div class="card" style="margin-bottom:20px;border-left:4px solid var(--primary)">
+  <h3>Ubah Harga Massal (naik / turun %)</h3>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
+    <select id="h_scope" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px">
+      <option value="SEMUA">Semua produk</option>
+      <option value="KODE">Per Kode (misal EQS)</option>
+      <option value="KATEGORI">Per Kategori (misal BOTOL)</option>
+    </select>
+    <input id="h_nilai" placeholder="Isi kode / kategori (kosongkan jika Semua)" style="margin:0;width:220px">
+    <input id="h_persen" type="number" placeholder="Persen: 10 atau -10" style="margin:0;width:160px">
+    <button type="button" onclick="previewHarga()">Lihat Contoh</button>
+    <button type="button" class="btn-danger" onclick="terapkanHarga()">Terapkan</button>
+  </div>
+  <div id="h_hasil" style="margin-top:12px"></div>
+</div>
 <div class="card" style="margin-bottom:20px;border-left:4px solid var(--danger)">
   <h3>Stok Menipis (&lt; 10)</h3>
   {% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}
@@ -55,4 +70,30 @@
     </form>
   </div>
 </div>
+<script>
+function formDataHarga(){
+const f=new FormData();
+f.append('scope',document.getElementById('h_scope').value);
+f.append('nilai',document.getElementById('h_nilai').value);
+f.append('persen',document.getElementById('h_persen').value||0);
+return f;
+}
+function previewHarga(){
+fetch('/harga/preview',{method:'POST',body:formDataHarga()}).then(r=>r.json()).then(d=>{
+let html='<p><strong>'+d.total+' produk cocok.</strong></p>';
+html+='<table><tr><th>Nama</th><th>Harga Lama</th><th>Harga Baru</th></tr>';
+d.rows.forEach(r=>{html+='<tr><td>'+r.nama+'</td><td>'+r.lama+'</td><td><strong>'+r.baru+'</strong></td></tr>';});
+html+='</table>';
+if(d.total>d.rows.length){html+='<p style="color:var(--muted)">(menampilkan 20 pertama dari '+d.total+')</p>';}
+document.getElementById('h_hasil').innerHTML=html;
+});
+}
+function terapkanHarga(){
+if(!confirm('Yakin terapkan perubahan harga ini?'))return;
+fetch('/harga/terapkan',{method:'POST',body:formDataHarga()}).then(r=>r.json()).then(d=>{
+alert('Berhasil! '+d.n+' produk diubah.');
+window.location.reload();
+});
+}
+</script>
 {% endblock %}

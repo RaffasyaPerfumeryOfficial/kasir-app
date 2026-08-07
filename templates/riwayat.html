@@ -6,19 +6,45 @@
   <span class="badge">{{ jumlah_transaksi }} transaksi</span>
 </div>
 <div class="card" style="margin-bottom:20px">
-  <p>Total penjualan: <strong>Rp {{ "%0.0f"|format(total_penjualan) }}</strong></p>
+  <form method="get" action="/riwayat" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <select name="filter" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px">
+      <option value="" {{ 'selected' if filter == '' }}>Semua</option>
+      <option value="HARI" {{ 'selected' if filter == 'HARI' }}>Hari Ini</option>
+      <option value="KEMARIN" {{ 'selected' if filter == 'KEMARIN' }}>Kemarin</option>
+      <option value="KOSTUM" {{ 'selected' if filter == 'KOSTUM' }}>Kostum</option>
+      <option value="BULAN" {{ 'selected' if filter == 'BULAN' }}>Per Bulan</option>
+    </select>
+    <input type="date" name="dari" value="{{ dari }}" style="margin:0;width:auto">
+    <span>s/d</span>
+    <input type="date" name="sampai" value="{{ sampai }}" style="margin:0;width:auto">
+    <input type="text" name="q" value="{{ q }}" placeholder="Cari 5 kode akhir struk (mis. V5KWJ)" style="margin:0;width:230px">
+    <button type="submit">Tampilkan</button>
+    <a href="/riwayat/export?filter={{ filter }}&dari={{ dari }}&sampai={{ sampai }}&q={{ q }}"><button type="button">Download Excel</button></a>
+  </form>
+  <p style="margin-top:8px;color:var(--muted)">"Per Bulan": isi tanggal pertama dengan bulan tsb (mis. 2026-08-01 = Agustus 2026). Pencarian kode berlaku lintas hari/bulan/tahun.</p>
+</div>
+<div class="card" style="margin-bottom:20px">
+  <p>Total penjualan (tanpa VOID): <strong>Rp {{ "%0.0f"|format(total_penjualan) }}</strong></p>
 </div>
 <div class="card">
   <table>
-    <tr><th>ID Transaksi</th><th>Waktu</th><th>Metode</th><th>Items</th><th>Total</th><th></th></tr>
+    <tr><th>ID Transaksi</th><th>Waktu</th><th>Metode</th><th>Items</th><th>Total</th><th>Status</th><th>Aksi</th></tr>
     {% for tr in transaksi_list %}
-    <tr>
+    <tr style="{{ 'opacity:0.5' if tr.void }}">
       <td>{{ tr.kode }}</td>
       <td>{{ tr.dibuat }}</td>
       <td>{{ tr.metode }}</td>
       <td>{% for it in tr['items'] %}{{ it.nama }} x{{ it.jumlah }}<br>{% endfor %}</td>
       <td>{{ "%0.0f"|format(tr.total) }}</td>
-      <td><a href="/struk/{{ tr.id }}">Struk</a></td>
+      <td>{% if tr.void %}<span class="badge" style="background:#fee2e2;color:var(--danger)">VOID</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">SAH</span>{% endif %}</td>
+      <td>
+        <a href="/struk/{{ tr.id }}">Struk</a>
+        {% if not tr.void %}
+        <form method="post" action="/transaksi/void/{{ tr.id }}" style="display:inline" onsubmit="return confirm('Void transaksi ini? Stok dikembalikan & omzet berkurang.')">
+          <button class="btn-danger" type="submit">Void</button>
+        </form>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </table>
