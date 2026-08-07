@@ -240,10 +240,18 @@ async def proteksi_login(request: Request, call_next):
     publik = (
         path == "/login"
         or path == "/login/masuk"
-        or path == "/favicon.ico"
+        or path == "/favicon.ico" or path.startswith("/static")
     )
     if not publik:
         sid = request.cookies.get("session_id")
         if not sid or sid not in SESSIONS:
             return RedirectResponse("/login", status_code=303)
     return await call_next(request)
+
+
+from fastapi.staticfiles import StaticFiles
+
+NAMA_TOKO = "MEKAR SARI"
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates.env.globals["nama_toko"] = NAMA_TOKO

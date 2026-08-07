@@ -1,25 +1,14 @@
-﻿<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Edit Produk</title>
-<style>
-body{font-family:Arial;margin:20px;background:#f4f6f8}
-.kotak{background:white;padding:16px;border-radius:8px;max-width:500px}
-input{padding:6px;margin:4px 0}
-button{padding:6px 12px}
-</style>
-</head>
-<body>
-<h1>Edit Produk</h1>
-<p><a href="/manajemen">Kembali ke Manajemen</a></p>
-<div class="kotak">
-<form method="post" action="/produk/update/{{ produk.id }}">
-<input name="nama" value="{{ produk.nama }}" required><br>
-<input name="harga" type="number" value="{{ '%0.0f'|format(produk.harga) }}" required><br>
-<input name="stok" type="number" value="{{ produk.stok }}" required><br>
-<button type="submit">Simpan Perubahan</button>
-</form>
+﻿{% extends "base.html" %}
+{% block title %}Edit Produk{% endblock %}
+{% block content %}
+<div class="topbar"><h2>Edit Produk</h2></div>
+<div class="card" style="max-width:500px">
+  <form method="post" action="/produk/update/{{ produk.id }}">
+    <input name="nama" value="{{ produk.nama }}" required>
+    <input name="harga" type="number" value="{{ '%0.0f'|format(produk.harga) }}" required>
+    <input name="stok" type="number" value="{{ produk.stok }}" required>
+    <button style="width:100%">Simpan Perubahan</button>
+  </form>
+  <p style="margin-top:10px"><a href="/manajemen">Kembali ke Manajemen</a></p>
 </div>
-</body>
-</html>
+{% endblock %}

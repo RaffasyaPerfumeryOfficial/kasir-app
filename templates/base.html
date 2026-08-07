@@ -1,0 +1,24 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ nama_toko }}{% endblock %} - {{ nama_toko }}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+  <div class="sidebar">
+    <h1>{{ nama_toko }}</h1>
+    <a href="/kasir">Kasir</a>
+    <a href="/riwayat">Riwayat</a>
+    <a href="/manajemen">Manajemen</a>
+    <a href="/laporan">Laporan</a>
+    <a href="/logout">Keluar</a>
+  </div>
+  <div class="main">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+</body>
+</html>
