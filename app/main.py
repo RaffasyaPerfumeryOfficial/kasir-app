@@ -751,7 +751,7 @@ def jawab_ai(q, db):
         t2 = cari_produk(q, produk_list)
         if t2:
             short2 = t2.nama.split(" - ")[1] if " - " in t2.nama else t2.nama
-            return t2.nama + ":\n" + (N.get(t2.nama) or "Data notes belum ada untuk produk ini.") + "\n\nMau saya carikan parfum dengan notes menyerupai " + short2 + "? Jawab: ya"
+            return t2.nama + ":\n" + format_notes(N.get(t2.nama) or "Data notes belum ada untuk produk ini.") + "\n\nMau saya carikan parfum dengan notes menyerupai " + short2 + "? Jawab: ya"
         return "Produk tidak ditemukan. Contoh pertanyaan: notes AFNAN - 9PM"
     if "laris" in q:
         hit = {}
@@ -879,7 +879,7 @@ def jawab_ai2(q, db, ctx=""):
                 break
         if tgt:
             short = tgt.nama.split(" - ")[1] if " - " in tgt.nama else tgt.nama
-            return tgt.nama + ":\nNotes: " + (N.get(tgt.nama) or "-") + "\n\nMau saya carikan parfum dengan notes menyerupai " + short + "? Jawab: ya"
+            return tgt.nama + ":\n" + format_notes(N.get(tgt.nama)) + "\n\nMau saya carikan parfum dengan notes menyerupai " + short + "? Jawab: ya"
     if "mirip" in ql or "serupa" in ql or "menyerupai" in ql:
         target = cari_produk(ql, produk_list)
         if not target:
@@ -903,6 +903,19 @@ def jawab_ai2(q, db, ctx=""):
                 if others:
                     return "Produk lain dari " + brand + ":\n" + "\n".join(str(i + 1) + ". " + p.nama for i, p in enumerate(others))
             return "Tidak ada produk lain dari brand ini."
+        if "ada" in ql or "mengandung" in ql or "pakai" in ql or "pake" in ql:
+            nts_low = (N.get(target.nama) or "").lower()
+            bad = STOP_WORDS + ["apakah", "ada", "nya", "mengandung", "pakai", "pake", "tidak", "gak", "apa", "notes", "aroma", "wangi"]
+            sisa = [w for w in re.split("[^a-z0-9]+", ql) if len(w) >= 3 and w not in bad]
+            ntoks_t = set(re.split("[^a-z0-9]+", target.nama.lower()))
+            sisa = [w for w in sisa if w not in ntoks_t]
+            if sisa:
+                ing = sisa[0]
+                terms = NOTE_SYNONYMS.get(ing, [ing])
+                for tm in terms:
+                    if tm in nts_low:
+                        return "Ya, " + target.nama + " mengandung " + ing + ".\n" + format_notes(N.get(target.nama))
+                return "Tidak ada " + ing + " di " + target.nama + ".\nNotesnya:\n" + format_notes(N.get(target.nama))
         if "stok" in ql or "sisa" in ql or "tersisa" in ql:
             return "Stok " + target.nama + ": " + str(target.stok or 0)
         if "modal" in ql or "grosir" in ql:
@@ -929,7 +942,7 @@ def jawab_ai2(q, db, ctx=""):
         out += "Stok sekarang: " + str(target.stok or 0) + "\n"
         out += "Terjual: " + str(terjual.get(target.nama, 0))
         if nts:
-            out += "\nNotes: " + nts
+            out += "\n" + format_notes(nts)
         return out
     if "kode" in ql or "pabrik" in ql or "brand" in ql or "dari apa" in ql:
         codes = set((p.kode or "").lower() for p in produk_list if p.kode)
@@ -1090,7 +1103,7 @@ def jawab_ai2(q, db, ctx=""):
         has_name = ("apa saja" not in ql) and cari_produk(ql, produk_list) is not None
         if not has_name:
             clean = ql
-            for w in ["parfume", "parfum", "notes", "note", "aroma", "wangi", "apa", "saja", "yang", "ini", "dengan", "laris", "terlaris", "hari", "bulan", "minggu", "?"]:
+            for w in ["parfume", "parfum", "notes", "note", "aroma", "wangi", "apa", "saja", "yang", "ini", "dengan", "laris", "terlaris", "hari", "bulan", "minggu", "ada", "nya", "apakah", "mengandung", "pakai", "pake", "tidak", "gak", "punya", "dan", "atau", "di", "?"]:
                 clean = clean.replace(w, "")
             clean = clean.strip()
             if clean:
@@ -1241,6 +1254,10 @@ def cari_produk(ql, produk_list):
     for p in produk_list:
         if p.nama.lower() in ql:
             return p
+    for p in produk_list:
+        for w in re.split("[^a-z0-9]+", p.nama.lower()):
+            if len(w) >= 7 and w in ql:
+                return p
     toks = [w for w in re.split("[^a-z0-9]+", ql) if len(w) >= 3 and w not in STOP_WORDS]
     if not toks:
         return None
@@ -1331,3 +1348,11 @@ def harga_terapkan(
 
 def transaksi_valid(db):
     return db.query(models.Transaksi).filter((models.Transaksi.void == None) | (models.Transaksi.void == 0)).all()
+
+def format_notes(s):
+    if not s:
+        return "-"
+    if " | " not in s:
+        return s
+    return s.replace(" | ", "\n").replace("TOP: ", "Top notes: ").replace("MID: ", "Middle notes: ").replace("BASE: ", "Base notes: ").replace("ACCORD: ", "Main accords: ")
+
