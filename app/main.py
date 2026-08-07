@@ -172,6 +172,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "top_produk": top_produk,
             "grafik": grafik,
             "max_total": max_total,
+            "saran_list": buat_saran(db),
             "mode": mode,
             "dari": dari_s,
             "sampai": sampai_s,
@@ -562,3 +563,76 @@ def sesi_valid(token):
         return dbx.query(models.Sesi).filter_by(token=token).first() is not None
     finally:
         dbx.close()
+
+
+def buat_saran(db):
+    saran = []
+    today = date.today()
+    produk_list = db.query(models.Produk).all()
+    transaksi_list = db.query(models.Transaksi).all()
+    month_start = today.replace(day=1)
+    habis = [p for p in produk_list if (p.stok or 0) == 0]
+    if habis:
+        names = ", ".join(p.nama for p in habis[:4])
+        saran.append(("warning", str(len(habis)) + " produk STOK HABIS (misal: " + names + "). Segera restock agar tidak kehilangan penjualan."))
+    rendah = [p for p in produk_list if 0 < (p.stok or 0) < 10]
+    if rendah:
+        names = ", ".join(p.nama for p in rendah[:4])
+        saran.append(("info", str(len(rendah)) + " produk stok menipis (<10): " + names + ". Pertimbangkan restock."))
+    terjual = {}
+    for t in transaksi_list:
+        if t.dibuat and t.dibuat.date() >= month_start:
+            for it in json.loads(t.items):
+                terjual[it["nama"]] = terjual.get(it["nama"], 0) + it["jumlah"]
+    if terjual:
+        top_nama, top_qty = sorted(terjual.items(), key=lambda x: x[1], reverse=True)[0]
+        p = next((x for x in produk_list if x.nama == top_nama), None)
+        if p:
+            if (p.stok or 0) < top_qty:
+                saran.append(("warning", "Produk terlaris bulan ini " + top_nama + " (" + str(top_qty) + " terjual) stoknya tinggal " + str(p.stok) + ". Restock segera!"))
+            else:
+                saran.append(("success", "Produk terlaris bulan ini: " + top_nama + " (" + str(top_qty) + " terjual). Stok " + str(p.stok) + " masih aman."))
+    omzet_7 = sum(t.total for t in transaksi_list if t.dibuat and today - timedelta(days=6) <= t.dibuat.date() <= today)
+    omzet_7p = sum(t.total for t in transaksi_list if t.dibuat and today - timedelta(days=13) <= t.dibuat.date() <= today - timedelta(days=7))
+    if omzet_7p > 0:
+        diff = (omzet_7 - omzet_7p) / omzet_7p * 100
+        if diff >= 10:
+            saran.append(("success", "Omzet 7 hari terakhir naik " + str(int(diff)) + "% dibanding minggu sebelumnya. Pertahankan!"))
+        elif diff <= -10:
+            saran.append(("warning", "Omzet 7 hari terakhir turun " + str(int(abs(diff))) + "%. Coba promo bundling parfum BIBIT atau diskon qty."))
+        else:
+            saran.append(("info", "Omzet 7 hari terakhir stabil dibanding minggu sebelumnya."))
+    tunai = sum(t.p_tunai or 0 for t in transaksi_list)
+    nontunai = sum(t.p_nontunai or 0 for t in transaksi_list)
+    tot = tunai + nontunai
+    if tot > 0:
+        pct_non = nontunai / tot * 100
+        if pct_non >= 60:
+            saran.append(("info", str(int(pct_non)) + "% pembayaran NON-TUNAI. Pastikan cek mutasi QRIS setiap tutup kasir."))
+        else:
+            saran.append(("info", str(int(100 - pct_non)) + "% pembayaran TUNAI. Siapkan pecahan kecil untuk kembalian."))
+    omzet_b = 0.0
+    modal_b = 0.0
+    for t in transaksi_list:
+        if t.dibuat and t.dibuat.date() >= month_start:
+            omzet_b += t.total
+            modal_b += t.total_modal or 0.0
+    if omzet_b > 0:
+        margin = (omzet_b - modal_b) / omzet_b * 100
+        if margin < 40:
+            saran.append(("warning", "Margin bulan ini " + str(int(margin)) + "% (rendah). Tinjau harga jual parfum dengan modal tinggi."))
+        else:
+            saran.append(("success", "Margin keuntungan bulan ini sehat: " + str(int(margin)) + "%."))
+    sold_names = set()
+    for t in transaksi_list:
+        for it in json.loads(t.items):
+            sold_names.add(it["nama"])
+    never = [p for p in produk_list if p.nama not in sold_names and (p.stok or 0) > 0]
+    if never:
+        saran.append(("info", str(len(never)) + " produk belum pernah terjual (misal: " + ", ".join(p.nama for p in never[:3]) + "). Coba pajang di etalase depan atau beri diskon."))
+    selisih_neg = db.query(models.TutupKasir).filter(models.TutupKasir.nontunai_selisih < 0).count()
+    if selisih_neg:
+        saran.append(("warning", "Ada " + str(selisih_neg) + " tutup kasir dengan selisih NON-TUNAI minus. Periksa kembali mutasi QRIS."))
+    if not saran:
+        saran.append(("success", "Semua indikator bagus. Pertahankan!"))
+    return saran

@@ -11,6 +11,14 @@
   <div class="card" style="border-left:4px solid var(--success)"><h3>TUNAI (keseluruhan)</h3><p>Rp {{ "%0.0f"|format(tunai_total) }}</p></div>
   <div class="card" style="border-left:4px solid var(--primary)"><h3>NON-TUNAI (keseluruhan)</h3><p>Rp {{ "%0.0f"|format(nontunai_total) }}</p></div>
 </div>
+<div class="card" style="margin-top:20px;border-left:4px solid var(--primary)">
+  <h3 style="margin-bottom:12px">Asisten AI - Saran Bisnis</h3>
+  {% for tipe, teks in saran_list %}
+  <p style="margin:8px 0;padding:10px;border-radius:8px;background:{% if tipe == 'warning' %}#fee2e2{% elif tipe == 'success' %}#dcfce7{% else %}#e0e7ff{% endif %}">
+    {% if tipe == 'warning' %}⚠️{% elif tipe == 'success' %}✅{% else %}💡{% endif %} {{ teks }}
+  </p>
+  {% endfor %}
+</div>
 <div class="grid" style="margin-top:20px">
   <div class="card">
     <h3 style="margin-bottom:12px">Grafik Omzet</h3>
