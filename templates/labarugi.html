@@ -2,7 +2,13 @@
 {% block title %}Laba Rugi{% endblock %}
 {% block content %}
 <div class="topbar"><h2>Laba Rugi</h2></div>
-<div class="grid">
+<div class="stat">
+  <div class="card"><h3>Omzet</h3><p>Rp {{ "%0.0f"|format(tot_omzet) }}</p></div>
+  <div class="card"><h3>Modal</h3><p>Rp {{ "%0.0f"|format(tot_modal) }}</p></div>
+  <div class="card"><h3>Pengeluaran</h3><p>Rp {{ "%0.0f"|format(tot_pengeluaran) }}</p></div>
+  <div class="card" style="border-left:4px solid var(--success)"><h3>Keuntungan</h3><p style="color:{{ 'var(--danger)' if tot_laba < 0 else 'var(--success)' }}">Rp {{ "%0.0f"|format(tot_laba) }}</p></div>
+</div>
+<div class="grid" style="margin-top:20px">
   <div class="card">
     <h3 style="margin-bottom:12px">Klik Pengeluaran</h3>
     <form method="post" action="/pengeluaran">
@@ -22,6 +28,7 @@
   </div>
 </div>
 <div class="card" style="margin-top:20px">
+  <h3 style="margin-bottom:12px">Per Hari</h3>
   <table>
     <tr><th>Tanggal</th><th>Omzet</th><th>Modal</th><th>Pengeluaran</th><th>Laba</th></tr>
     {% for r in rows %}
@@ -31,6 +38,22 @@
       <td>{{ "%0.0f"|format(r.modal) }}</td>
       <td>{{ "%0.0f"|format(r.pengeluaran) }}</td>
       <td style="color:{{ 'var(--danger)' if r.laba < 0 else 'var(--success)' }};font-weight:700">{{ "%0.0f"|format(r.laba) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="card" style="margin-top:20px">
+  <h3 style="margin-bottom:12px">Total Keseluruhan Per Bulan</h3>
+  <table>
+    <tr><th>Bulan</th><th>Omzet</th><th>Modal</th><th>Pengeluaran</th><th>Keuntungan</th><th>Margin</th></tr>
+    {% for b in bulan_list %}
+    <tr>
+      <td>{{ b.bulan }}</td>
+      <td>{{ "%0.0f"|format(b.omzet) }}</td>
+      <td>{{ "%0.0f"|format(b.modal) }}</td>
+      <td>{{ "%0.0f"|format(b.pengeluaran) }}</td>
+      <td style="color:{{ 'var(--danger)' if b.laba < 0 else 'var(--success)' }};font-weight:700">{{ "%0.0f"|format(b.laba) }}</td>
+      <td>{{ "%0.1f"|format(b.margin) }}%</td>
     </tr>
     {% endfor %}
   </table>

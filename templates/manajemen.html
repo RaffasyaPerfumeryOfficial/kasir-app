@@ -7,7 +7,16 @@
 </div>
 <div class="card" style="margin-bottom:20px;border-left:4px solid var(--danger)">
   <h3>Stok Menipis (&lt; 10)</h3>
-  <p style="margin-top:6px">{% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}{% if rendah %}{{ rendah|map(attribute="nama")|join(", ") }}{% else %}Semua stok aman{% endif %}</p>
+  {% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}
+  {% if rendah %}
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;max-height:130px;overflow-y:auto">
+    {% for p in rendah %}
+    <span class="badge" style="background:#fee2e2;color:var(--danger)">{{ p.nama }} ({{ p.stok }})</span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="margin-top:6px">Semua stok aman</p>
+  {% endif %}
 </div>
 <div class="grid">
   <div class="card">

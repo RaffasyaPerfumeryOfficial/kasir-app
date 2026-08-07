@@ -40,9 +40,12 @@ class Transaksi(Base):
     items = Column(String)
     total = Column(Float, default=0.0)
     total_modal = Column(Float, default=0.0)
+    total_diskon = Column(Float, default=0.0)
     bayar = Column(Float, default=0.0)
     kembalian = Column(Float, default=0.0)
     metode = Column(String, default="TUNAI")
+    p_tunai = Column(Float, default=0.0)
+    p_nontunai = Column(Float, default=0.0)
     dibuat = Column(DateTime, default=datetime.now)
 
 
@@ -89,3 +92,17 @@ def migrate_db():
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN total_modal FLOAT"))
             if "metode" not in cols:
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN metode VARCHAR"))
+            if "total_diskon" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN total_diskon FLOAT"))
+            if "p_tunai" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN p_tunai FLOAT"))
+            if "p_nontunai" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN p_nontunai FLOAT"))
+            conn.execute(text(
+                "UPDATE transaksi SET p_tunai = total, p_nontunai = 0 "
+                "WHERE p_tunai IS NULL AND (metode IS NULL OR metode = 'TUNAI')"
+            ))
+            conn.execute(text(
+                "UPDATE transaksi SET p_tunai = 0, p_nontunai = total "
+                "WHERE p_nontunai IS NULL AND metode IS NOT NULL AND metode != 'TUNAI'"
+            ))
