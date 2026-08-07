@@ -833,11 +833,16 @@ def halaman_ai(request: Request):
     return templates.TemplateResponse(request, "ai.html", {})
 
 
+LAST_PRODUK = [""]
+
 @app.get("/ai/jawab")
 def ai_jawab(q: str, ctx: str = "", db: Session = Depends(get_db)):
+    if not ctx:
+        ctx = LAST_PRODUK[0]
     j = jawab_ai2(q, db, ctx)
     t = cari_produk(q, db.query(models.Produk).all())
     prod = t.nama if t else ctx
+    LAST_PRODUK[0] = prod or ""
     db.add(models.PesanAI(pertanyaan=q, jawaban=j))
     db.commit()
     return {"jawab": j, "produk": prod}
@@ -1354,17 +1359,26 @@ def format_notes(s):
         return "-"
     if " | " not in s:
         return s
-    return s.replace(" | ", "\n").replace("TOP: ", "Top notes: ").replace("MID: ", "Middle notes: ").replace("BASE: ", "Base notes: ").replace("ACCORD: ", "Main accords: ")
+    return s.replace(" | ", "\n").replace("ASLI: ", "Produk asli: ").replace("TOP: ", "Top notes: ").replace("MID: ", "Middle notes: ").replace("BASE: ", "Base notes: ").replace("ACCORD: ", "Main accords: ").replace("LONG: ", "Longevity: ").replace("SILL: ", "Sillage: ")
 
 
 @app.get("/produk/fetch_notes/{produk_id}")
-def fetch_notes_online(produk_id: int, db: Session = Depends(get_db)):
+def fetch_notes_online(produk_id: int, refresh: int = 0, db: Session = Depends(get_db)):
     from app import fragella
     produk = db.get(models.Produk, produk_id)
     if not produk:
         raise HTTPException(404, "Produk tidak ditemukan")
+    existing = N.get(produk.nama)
+    if existing and refresh == 0:
+        return {"ok": True, "notes": existing, "gratis": True}
     text, err = fragella.cari_notes_online(produk.nama)
     if err:
         return {"ok": False, "pesan": err}
     N[produk.nama] = text
-    return {"ok": True, "notes": text}
+    try:
+        with open("app/notes_data.py", "a", encoding="utf-8") as f:
+            f.write('N["' + produk.nama.replace('"', "'") + '"] = "' + text.replace('"', "'") + '"\n')
+    except Exception:
+        pass
+    return {"ok": True, "notes": text, "gratis": False}
+

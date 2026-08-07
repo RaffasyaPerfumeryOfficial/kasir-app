@@ -2,7 +2,7 @@
 {% block title %}Edit Produk{% endblock %}
 {% block content %}
 <div class="topbar"><h2>Edit Produk</h2></div>
-<div class="card" style="max-width:500px">
+<div class="card" style="max-width:520px">
   <form method="post" action="/produk/update/{{ produk.id }}">
     <input name="nama" value="{{ produk.nama }}" required>
     <input name="kode" value="{{ produk.kode or '' }}">
@@ -14,24 +14,26 @@
   </form>
   <p style="margin-top:10px"><a href="/manajemen">Kembali ke Produk</a></p>
   <hr style="margin:16px 0">
-  <h4>🌐 Ambil Notes dari Fragella</h4>
-  <p style="color:var(--muted);font-size:13px">Klik untuk mengambil piramida TOP/MID/BASE + accords dari database global 74.000+ parfum. Biaya ± Rp 82 / klik.</p>
-  <button type="button" id="btnFetch" onclick="ambilNotes()" style="background:#2563eb">Ambil Notes Online</button>
+  <h4>Notes Parfum</h4>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+    <button type="button" style="background:var(--success)" onclick="ambil(0)">Lihat Notes Tersimpan (GRATIS)</button>
+    <button type="button" style="background:#2563eb" onclick="ambil(1)">Ambil Ulang dari Fragella (BAYAR ±Rp 82)</button>
+  </div>
   <div id="fetchResult" style="margin-top:10px;white-space:pre-line"></div>
 </div>
 <script>
-function ambilNotes(){
-const btn=document.getElementById('btnFetch');
+function ambil(refresh){
+if(refresh===1&&!confirm("Ini akan memotong saldo Fragella $0.005 (±Rp 82). Lanjutkan?"))return;
 const out=document.getElementById('fetchResult');
-btn.disabled=true;btn.textContent='Memuat...';out.textContent='';
-fetch('/produk/fetch_notes/{{ produk.id }}').then(r=>r.json()).then(d=>{
-if(d.ok){
-out.innerHTML='<strong style="color:var(--success)">Berhasil!</strong>\n'+d.notes.replace(/\|/g,'\n');
-}else{
-out.innerHTML='<span style="color:var(--danger)">'+d.pesan+'</span>';
-}
-btn.disabled=false;btn.textContent='Ambil Notes Online';
+out.textContent='Memuat...';
+fetch('/produk/fetch_notes/{{ produk.id }}?refresh='+refresh).then(r=>r.json()).then(d=>{
+if(!d.ok){out.innerHTML='<span style="color:var(--danger)">'+d.pesan+'</span>';return;}
+let head='';
+if(d.gratis){head='<strong style="color:var(--success)">GRATIS</strong> - dari penyimpanan lokal:';}
+else{head='<strong style="color:#2563eb">Baru diambil dari Fragella ($0.005)</strong> - sudah DISIMPAN permanen, selanjutnya gratis:';}
+out.innerHTML=head+'\n'+d.notes.replace(/\|/g,'\n');
 });
 }
 </script>
 {% endblock %}
+

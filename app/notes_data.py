@@ -615,3 +615,5 @@ N.update({
 "ZAHAR HAWAI": "TOP: coconut, citrus | MID: tropical floral | BASE: vanilla | ACCORD: tropical",
 "ZWEETSAL": "TOP: fruit candy | MID: sweet | BASE: musk | ACCORD: sweet",
 })
+N["VERZACE - EROS FLAME"] = "ASLI: Versace Eros Flame by Gianni Versace | TOP: Mandarin Orange, Madagascar Pepper, Lemon, Chinotto, Rosemary | MID: Geranium, Rose, Pepperwood™ | BASE: Vanilla, Tonka Bean, Sandalwood, Texas Cedar, Patchouli, Oakmoss | ACCORD: citrus, gourmand, vanilla, fresh spicy, aromatic, woody, warm spicy, sweet, powdery | LONG: Long Lasting | SILL: Strong"
+N["VERZACE - EROS FLAME"] = "ASLI: Versace Eros Flame by Gianni Versace | TOP: Mandarin Orange, Madagascar Pepper, Lemon, Chinotto, Rosemary | MID: Geranium, Rose, Pepperwood™ | BASE: Vanilla, Tonka Bean, Sandalwood, Texas Cedar, Patchouli, Oakmoss | ACCORD: citrus, gourmand, vanilla, fresh spicy, aromatic, woody, warm spicy, sweet, powdery | LONG: Long Lasting | SILL: Strong"
