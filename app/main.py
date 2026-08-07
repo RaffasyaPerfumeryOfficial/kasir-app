@@ -1,4 +1,5 @@
 ﻿import json
+import re
 import random
 import secrets
 import string
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.notes_data import N
+from app.gender_data import G
 from app.db import Base, SessionLocal, engine, get_db
 
 Base.metadata.create_all(bind=engine)
@@ -754,8 +756,148 @@ def halaman_ai(request: Request):
 
 @app.get("/ai/jawab")
 def ai_jawab(q: str, db: Session = Depends(get_db)):
-    return {"jawab": jawab_ai(q, db)}
+    return {"jawab": jawab_ai2(q, db)}
 
 
 
 
+
+
+def jawab_ai2(q, db):
+    ql = (q or "").lower()
+    transaksi_list = db.query(models.Transaksi).all()
+    produk_list = db.query(models.Produk).all()
+    terjual = {}
+    for t in transaksi_list:
+        for it in json.loads(t.items):
+            terjual[it["nama"]] = terjual.get(it["nama"], 0) + it["jumlah"]
+    if "mirip" in ql or "serupa" in ql or "menyerupai" in ql:
+        target = None
+        for p in produk_list:
+            if p.nama.lower() in ql:
+                target = p
+                break
+        if not target:
+            clean = ql
+            for w in ["mirip", "serupa", "menyerupai", "parfum", "yang", "apa", "dengan"]:
+                clean = clean.replace(w, "")
+            clean = clean.strip()
+            for p in produk_list:
+                if clean and clean in p.nama.lower():
+                    target = p
+                    break
+        if not target:
+            return "Sebutkan nama parfumnya. Contoh: yang mirip sauvage"
+        my_notes = (N.get(target.nama) or "").lower()
+        tokens = set(w for w in re.split("[^a-z]+", my_notes) if len(w) > 3)
+        scores = []
+        for p in produk_list:
+            if p.nama == target.nama:
+                continue
+            other = (N.get(p.nama) or "").lower()
+            if not other:
+                continue
+            ot = set(w for w in re.split("[^a-z]+", other) if len(w) > 3)
+            common = len(tokens & ot)
+            if common > 0:
+                scores.append((common, p))
+        scores.sort(key=lambda x: x[0], reverse=True)
+        top = scores[:5]
+        if not top:
+            return "Tidak ditemukan parfum mirip " + target.nama + "."
+        out = "Mirip " + target.nama + ":\n"
+        for i, (s, p) in enumerate(top):
+            out += str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ")\n"
+        return out
+    if ("omzet" in ql or "omset" in ql) and ("hari ini" in ql or "sekarang" in ql):
+        tot = 0.0
+        tun = 0.0
+        non = 0.0
+        for t in transaksi_list:
+            if t.dibuat and t.dibuat.date() == date.today():
+                tot += t.total
+                tun += t.p_tunai or 0.0
+                non += t.p_nontunai or 0.0
+        return "Omzet hari ini:\n" + rp(tot) + "\nQRIS " + rp(non) + "\nTunai " + rp(tun)
+    if "harus" in ql and ("jual" in ql or "terjual" in ql):
+        out = "Produk yang harus dijual hari ini:\nPEREMPUAN:\n"
+        pool_w = [p for p in produk_list if G.get(p.nama, "").startswith("wanita") or G.get(p.nama, "").startswith("unisex")]
+        sold_w = sorted([p for p in pool_w if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:5]
+        never_w = daftar_belum_terjual(pool_w, terjual, 5)
+        i = 0
+        for p in sold_w + never_w:
+            i += 1
+            out += str(i) + ". " + p.nama + "\n"
+        out += "LAKI-LAKI:\n"
+        pool_m = [p for p in produk_list if G.get(p.nama, "").startswith("pria") or G.get(p.nama, "").startswith("unisex")]
+        sold_m = sorted([p for p in pool_m if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:5]
+        never_m = daftar_belum_terjual(pool_m, terjual, 5)
+        i = 0
+        for p in sold_m + never_m:
+            i += 1
+            out += str(i) + ". " + p.nama + "\n"
+        return out
+    if "laris" in ql and ("habis" in ql or "menipis" in ql or "hampir" in ql):
+        low = [p for p in produk_list if terjual.get(p.nama, 0) > 0 and (p.stok or 0) < 10]
+        low.sort(key=lambda p: terjual[p.nama], reverse=True)
+        if not low:
+            return "Tidak ada produk laris yang hampir habis. Stok aman."
+        out = "Laris tetapi hampir habis / habis:\n"
+        out += "\n".join(str(i + 1) + ". " + p.nama + " (terjual " + str(terjual[p.nama]) + ", stok " + str(p.stok) + ")" for i, p in enumerate(low[:10]))
+        return out
+    male_kw = ["pria", "cowok", "cowo", "cwok", "laki", "bujang"]
+    female_kw = ["wanita", "perempuan", "cewek", "cewe", "cwek", "cwe", "gadis"]
+    is_male = any(k in ql for k in male_kw)
+    is_female = any(k in ql for k in female_kw)
+    if (is_male or is_female) and ("parfum" in ql or "apa" in ql):
+        gender = "pria" if is_male else "wanita"
+        pool = [p for p in produk_list if G.get(p.nama, "").startswith(gender) or G.get(p.nama, "").startswith("unisex")]
+        if "anak" in ql or "bayi" in ql or "remaja" in ql:
+            pool2 = [p for p in pool if any(a in G.get(p.nama, "") for a in ["anak", "bayi", "remaja"])]
+            if pool2:
+                pool = pool2
+        sold = sorted([p for p in pool if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:5]
+        never = daftar_belum_terjual(pool, terjual, 5)
+        out = "Parfum " + gender.upper() + ":\nBest seller:\n"
+        if sold:
+            out += "\n".join(str(i + 1) + ". " + p.nama + " (" + str(terjual[p.nama]) + " terjual)" for i, p in enumerate(sold))
+        else:
+            out += "(belum ada yang terjual)"
+        out += "\nBelum pernah terjual:\n"
+        if never:
+            out += "\n".join(str(i + 1) + ". " + p.nama for i, p in enumerate(never))
+        else:
+            out += "(semua sudah terjual)"
+        return out
+    if "notes" in ql or "aroma" in ql or "wangi" in ql:
+        has_name = any(p.nama.lower() in ql for p in produk_list)
+        if not has_name:
+            clean = ql
+            for w in ["notes", "note", "aroma", "wangi", "parfum", "apa", "saja", "yang", "ini", "dengan", "?"]:
+                clean = clean.replace(w, "")
+            clean = clean.strip()
+            if clean:
+                cands = [p for p in produk_list if clean in (N.get(p.nama) or "").lower() and G.get(p.nama, "") not in ("", "-")]
+                if cands:
+                    best = sorted([p for p in cands if terjual.get(p.nama, 0) > 0], key=lambda p: terjual[p.nama], reverse=True)[:3]
+                    never = [p for p in cands if terjual.get(p.nama, 0) == 0][:3]
+                    women = [p for p in cands if G.get(p.nama, "").startswith("wanita")][:2]
+                    men = [p for p in cands if G.get(p.nama, "").startswith("pria")][:2]
+                    seen = set()
+                    final = []
+                    for p in best + never + women + men:
+                        if p.nama not in seen:
+                            seen.add(p.nama)
+                            final.append(p)
+                    final = final[:10]
+                    out = "Parfum dengan notes '" + clean + "':\n"
+                    out += "\n".join(str(i + 1) + ". " + p.nama + " (" + G.get(p.nama, "unisex") + ", " + str(terjual.get(p.nama, 0)) + " terjual)" for i, p in enumerate(final))
+                    return out
+    return jawab_ai(q, db)
+
+
+def daftar_belum_terjual(pool, terjual, n):
+    never = [p for p in pool if terjual.get(p.nama, 0) == 0 and not p.nama.startswith("ARABIC PERFUME") and not p.nama.startswith("CANDY / FRUIT")]
+    if not never:
+        return []
+    return random.sample(never, min(n, len(never)))

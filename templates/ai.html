@@ -3,26 +3,33 @@
 {% block content %}
 <div class="topbar"><h2>Pesan AI</h2></div>
 <div class="card" style="max-width:720px">
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button type="button" onclick="ask('berapa omset hari ini?')">1. Omzet hari ini</button>
+    <button type="button" onclick="ask('produk apa yang harus dijual hari ini?')">2. Harus dijual hari ini</button>
+    <button type="button" onclick="ask('produk apa yang laris tetapi hampir habis?')">3. Laris tapi hampir habis</button>
+  </div>
   <div id="chat" style="max-height:420px;overflow-y:auto;margin-bottom:12px">
     <p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong> Halo! Saya asisten MEKAR SARI.
-Tanyakan omzet / keuntungan / modal / margin (harian, mingguan, bulanan, tahunan), atau produk BIBIT yang laris.</p>
+Klik tombol 1-3 di atas, atau ketik pertanyaan sendiri (omzet, keuntungan, margin, notes, mirip parfum, parfum pria/wanita).</p>
   </div>
   <form onsubmit="kirim(event)" style="display:flex;gap:10px">
     <input id="q" placeholder="Tulis pertanyaan... contoh: berapa omzet bulanan?" required style="margin:0">
     <button type="submit">Kirim</button>
   </form>
-  <p style="margin-top:10px;color:var(--muted)">Contoh: "omzet harian", "keuntungan mingguan", "margin tahunan", "apa yang laris hari ini?", "apa yang harus terjual hari ini?"</p>
+  <p style="margin-top:10px;color:var(--muted)">Contoh: "omzet bulanan", "keuntungan mingguan", "notes baccarat", "yang mirip sauvage", "parfum cewek apa saja?"</p>
 </div>
 <script>
-function kirim(e){
-e.preventDefault();
-const q=document.getElementById('q').value;
+function ask(q){
 const chat=document.getElementById('chat');
 chat.innerHTML+='<p style="background:#e0e7ff;padding:10px;border-radius:8px;margin:8px 0"><strong>Anda:</strong> '+q+'</p>';
 fetch('/ai/jawab?q='+encodeURIComponent(q)).then(r=>r.json()).then(d=>{
 chat.innerHTML+='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong>\n'+d.jawab+'</p>';
 chat.scrollTop=chat.scrollHeight;
 });
+}
+function kirim(e){
+e.preventDefault();
+ask(document.getElementById('q').value);
 document.getElementById('q').value='';
 }
 </script>
