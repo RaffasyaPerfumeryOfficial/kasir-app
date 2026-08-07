@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import models
+from app.notes_data import N
 from app.db import Base, SessionLocal, engine, get_db
 
 Base.metadata.create_all(bind=engine)
@@ -665,6 +666,12 @@ def jawab_ai(q, db):
     produk_list = db.query(models.Produk).all()
     bibit = [p for p in produk_list if (p.kategori or "") == "BIBIT"]
     nama_bibit = set(p.nama for p in bibit)
+    if "notes" in q or "aroma" in q or "wangi" in q:
+        clean = q.replace("notes", "").replace("aroma", "").replace("wangi", "").strip()
+        for p in produk_list:
+            if p.nama.lower() in q or (clean and clean in p.nama.lower()):
+                return p.nama + ":\n" + (N.get(p.nama) or "Data notes belum ada untuk produk ini.")
+        return "Produk tidak ditemukan. Contoh pertanyaan: notes AFNAN - 9PM"
     if "laris" in q:
         hit = {}
         for t in transaksi_list:
@@ -748,5 +755,7 @@ def halaman_ai(request: Request):
 @app.get("/ai/jawab")
 def ai_jawab(q: str, db: Session = Depends(get_db)):
     return {"jawab": jawab_ai(q, db)}
+
+
 
 
