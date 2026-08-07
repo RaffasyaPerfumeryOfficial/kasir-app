@@ -15,29 +15,39 @@
     <button type="button" onclick="ask('berapa total qris bulan ini?')">9. Total QRIS</button>
     <button type="button" onclick="ask('produk apa yang perlu restock?')">10. Perlu restock</button>
   </div>
-  <div id="chat" style="max-height:420px;overflow-y:auto;margin-bottom:12px">
-    <p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong> Halo! Saya asisten MEKAR SARI.
-Klik tombol 1-10 di atas, atau ketik pertanyaan sendiri (omzet, laba, margin, notes, mirip parfum, parfum pria/wanita).</p>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button type="button" style="background:var(--success)" onclick="mulaiBaru()">+ Percakapan Baru</button>
+    <button type="button" style="background:#64748b" onclick="lihatRiwayat()">Riwayat Percakapan</button>
   </div>
+  <div id="chat" style="max-height:420px;overflow-y:auto;margin-bottom:12px"></div>
   <form onsubmit="kirim(event)" style="display:flex;gap:10px">
     <input id="q" placeholder="Tulis pertanyaan... contoh: berapa omzet bulanan?" required style="margin:0">
     <button type="submit">Kirim</button>
   </form>
-  <p style="margin-top:10px;color:var(--muted)">Contoh ketik: "omzet bulanan", "notes baccarat", "yang mirip sauvage", "parfum cewek apa saja?"</p>
+  <p style="margin-top:10px;color:var(--muted)">Percakapan tersimpan otomatis di database. Klik "Riwayat Percakapan" untuk melihat histori lengkap.</p>
 </div>
 <script>
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function addAnda(q){document.getElementById('chat').innerHTML+='<p style="background:#e0e7ff;padding:10px;border-radius:8px;margin:8px 0"><strong>Anda:</strong> '+esc(q)+'</p>';}
+function addAI(a){document.getElementById('chat').innerHTML+='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong>\n'+esc(a)+'</p>';}
+function salam(){document.getElementById('chat').innerHTML='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong> Halo! Saya asisten MEKAR SARI.\nKlik tombol 1-10 atau ketik pertanyaan. Percakapan tersimpan otomatis.</p>';}
 function ask(q){
-const chat=document.getElementById('chat');
-chat.innerHTML+='<p style="background:#e0e7ff;padding:10px;border-radius:8px;margin:8px 0"><strong>Anda:</strong> '+q+'</p>';
+addAnda(q);
 fetch('/ai/jawab?q='+encodeURIComponent(q)).then(r=>r.json()).then(d=>{
-chat.innerHTML+='<p style="background:#dcfce7;padding:10px;border-radius:8px;margin:8px 0;white-space:pre-line"><strong>AI:</strong>\n'+d.jawab+'</p>';
-chat.scrollTop=chat.scrollHeight;
+addAI(d.jawab);
+const c=document.getElementById('chat');c.scrollTop=c.scrollHeight;
 });
 }
-function kirim(e){
-e.preventDefault();
-ask(document.getElementById('q').value);
-document.getElementById('q').value='';
+function kirim(e){e.preventDefault();ask(document.getElementById('q').value);document.getElementById('q').value='';}
+function mulaiBaru(){salam();}
+function lihatRiwayat(){
+fetch('/ai/riwayat').then(r=>r.json()).then(d=>{
+const c=document.getElementById('chat');c.innerHTML='';
+if(d.length===0){salam();return;}
+d.forEach(x=>{addAnda(x.q);addAI(x.a);});
+c.scrollTop=c.scrollHeight;
+});
 }
+lihatRiwayat();
 </script>
 {% endblock %}

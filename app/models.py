@@ -112,3 +112,11 @@ class Sesi(Base):
 
     token = Column(String, primary_key=True)
     dibuat = Column(DateTime, default=datetime.now)
+
+class PesanAI(Base):
+    __tablename__ = "pesan_ai"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pertanyaan = Column(String)
+    jawaban = Column(String)
+    dibuat = Column(DateTime, default=datetime.now)
