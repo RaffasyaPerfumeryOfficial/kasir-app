@@ -335,3 +335,14 @@ def export_laporan(dari: str = "", sampai: str = "", db: Session = Depends(get_d
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=laporan-kasir.csv"},
     )
+
+from datetime import date as tanggal_hari
+from fastapi.responses import FileResponse
+
+@app.get("/backup")
+def backup_db():
+    return FileResponse(
+        "kasir.db",
+        filename="backup-kasir-" + tanggal_hari.isoformat() + ".db",
+        media_type="application/octet-stream",
+    )

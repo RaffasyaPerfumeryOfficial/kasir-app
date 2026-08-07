@@ -1,7 +1,7 @@
 ﻿{% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<div class="topbar"><h2>Dashboard</h2></div>
+<div class="topbar"><h2>Dashboard</h2><a href="/backup"><button type="button">Download Backup</button></a></div>
 <div class="stat">
   <div class="card"><h3>Omzet Hari Ini</h3><p>Rp {{ "%0.0f"|format(omzet_hari_ini) }}</p></div>
   <div class="card"><h3>Transaksi Hari Ini</h3><p>{{ transaksi_hari_ini }}</p></div>
@@ -30,3 +30,4 @@
   </div>
 </div>
 {% endblock %}
+
