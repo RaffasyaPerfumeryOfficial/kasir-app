@@ -132,3 +132,13 @@ class StokMasuk(Base):
     jumlah = Column(Integer, default=0)
     keterangan = Column(String)
     dibuat = Column(DateTime, default=datetime.now)
+
+class RiwayatTutup(Base):
+    __tablename__ = "riwayat_tutup"
+    id = Column(Integer, primary_key=True)
+    omzet = Column(Float, default=0)
+    tunai = Column(Float, default=0)
+    nontunai = Column(Float, default=0)
+    pengeluaran = Column(Float, default=0)
+    ringkasan = Column(String)
+    dibuat = Column(DateTime, default=datetime.now)

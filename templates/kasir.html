@@ -5,6 +5,7 @@
   <h2>Kasir</h2>
   <span class="badge">{{ produk_list|length }} produk</span>
   <button type="button" style="margin-left:auto;background:var(--danger)" onclick="openPengeluaran()">+ Pengeluaran</button>
+  <button type="button" style="background:#0f766e" onclick="tanyaTutup()">Tutup Kasir</button>
 </div>
 <div class="grid">
   <div class="card">
@@ -121,6 +122,26 @@
   </div>
 </div>
 
+<div id="modalTanya" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:70">
+  <div style="background:white;max-width:380px;margin:15vh auto;padding:24px;border-radius:12px;text-align:center">
+    <h3>Apakah Anda sudah ingin Tutup Kasir?</h3>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button style="flex:1;background:var(--success)" onclick="tutupTanya(true)">Ya</button>
+      <button style="flex:1;background:#64748b" onclick="tutupTanya(false)">Tidak</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalTutup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:70">
+  <div style="background:white;max-width:480px;margin:5vh auto;padding:20px;border-radius:12px">
+    <pre id="ringkasanPre" style="white-space:pre-wrap;font-size:13px"></pre>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button style="flex:1;background:#25D366" onclick="kirimWA()">Kirim via WhatsApp</button>
+      <button style="flex:1;background:#64748b" onclick="selesaiTutup()">Selesai</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let cart=[];
 let T=0;
@@ -145,7 +166,7 @@ let it=cart.find(i=>i.id===id);
 if(it){it.diskon=Math.max(0,parseFloat(v)||0);}
 render();
 }
-function hapus(id){cart=cart.filter(i=>i!==id&&i.id!==id);render();}
+function hapus(id){cart=cart.filter(i=>i.id!==id);render();}
 function hapusSemua(){cart=[];render();}
 function render(){
 const tb=document.getElementById('cartbody');tb.innerHTML='';
@@ -220,6 +241,20 @@ if(d.ok){alert('Pengeluaran Rp '+j.toLocaleString('id-ID')+' tercatat di hari in
 else{alert('Gagal menyimpan.');}
 });
 }
+function tanyaTutup(){document.getElementById('modalTanya').style.display='block';}
+function tutupTanya(ya){
+document.getElementById('modalTanya').style.display='none';
+if(!ya)return;
+fetch('/tutup/preview').then(r=>r.json()).then(d=>{
+fetch('/tutup/simpan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(()=>{
+window.__ringkasan=d.text;
+document.getElementById('ringkasanPre').textContent=d.text;
+document.getElementById('modalTutup').style.display='block';
+});
+});
+}
+function kirimWA(){window.open('https://wa.me/?text='+encodeURIComponent(window.__ringkasan),'_blank');}
+function selesaiTutup(){document.getElementById('modalTutup').style.display='none';}
 function konfirmasi(){
 const m=document.querySelector('input[name=metode]:checked').value;
 const dt=parseFloat(document.getElementById('diskon_all').value||0)||0;

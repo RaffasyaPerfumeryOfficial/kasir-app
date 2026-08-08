@@ -584,50 +584,23 @@ def tambah_pengeluaran(
 
 
 @app.get("/tutup")
-def halaman_tutup(request: Request, db: Session = Depends(get_db)):
-    tunai_sistem = 0.0
-    nontunai_sistem = 0.0
-    for t in transaksi_valid(db):
-        if t.dibuat and t.dibuat.date() == date.today():
-            tunai_sistem += t.p_tunai or 0.0
-            nontunai_sistem += t.p_nontunai or 0.0
-    riwayat_tutup = db.query(models.TutupKasir).order_by(models.TutupKasir.id.desc()).all()
-    return templates.TemplateResponse(
-        request,
-        "tutup.html",
-        {
-            "tunai_sistem": tunai_sistem,
-            "nontunai_sistem": nontunai_sistem,
-            "riwayat_tutup": riwayat_tutup,
-        },
-    )
+def tutup_page(request: Request, db: Session = Depends(get_db)):
+    riwayat = db.query(models.RiwayatTutup).order_by(models.RiwayatTutup.id.desc()).all()
+    return templates.TemplateResponse(request, "tutup.html", {"riwayat": riwayat})
 
 
-@app.post("/tutup")
-def proses_tutup(
-    nontunai_input: float = Form(...),
-    tunai_input: float = Form(0),
-    db: Session = Depends(get_db),
-):
-    tunai_sistem = 0.0
-    nontunai_sistem = 0.0
-    for t in transaksi_valid(db):
-        if t.dibuat and t.dibuat.date() == date.today():
-            tunai_sistem += t.p_tunai or 0.0
-            nontunai_sistem += t.p_nontunai or 0.0
-    db.add(
-        models.TutupKasir(
-            tanggal=date.today().isoformat(),
-            tunai_sistem=tunai_sistem,
-            tunai_input=tunai_input,
-            tunai_selisih=tunai_input - tunai_sistem,
-            nontunai_sistem=nontunai_sistem,
-            nontunai_input=nontunai_input,
-            nontunai_selisih=nontunai_input - nontunai_sistem,
-        )
-    )
+@app.get("/tutup/preview")
+def tutup_preview(db: Session = Depends(get_db)):
+    return buat_ringkasan(db)
+
+
+@app.post("/tutup/simpan")
+async def tutup_simpan(request: Request, db: Session = Depends(get_db)):
+    d = await request.json()
+    db.add(models.RiwayatTutup(omzet=d.get("omzet", 0), tunai=d.get("tunai", 0), nontunai=d.get("nontunai", 0), pengeluaran=d.get("pengeluaran", 0), ringkasan=d.get("text", "")))
     db.commit()
-    return RedirectResponse("/tutup", status_code=303)
+    return {"ok": True}
+
 
 
 @app.get("/backup")
@@ -1521,3 +1494,58 @@ async def pengeluaran_cepat(request: Request, db: Session = Depends(get_db)):
     db.add(peng)
     db.commit()
     return {"ok": True}
+
+def buat_ringkasan(db):
+    from datetime import date as _date
+    today = _date.today()
+    trx = [t for t in transaksi_valid(db) if t.dibuat.date() == today]
+    omzet = sum(t.total or 0 for t in trx)
+    tunai = sum(t.p_tunai or 0 for t in trx)
+    nontunai = sum(t.p_nontunai or 0 for t in trx)
+    satuan = {"BIBIT": "ML", "BOTOL": "PCS", "CAMPURAN": "ML", "AKSESORIS": "ML"}
+    kat = {}
+    for t in trx:
+        for it in json.loads(t.items):
+            p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            k = ((p.kategori or "LAIN").upper()) if p else "LAIN"
+            harga_it = it.get("harga") or (p.harga if p else 0) or 0
+            a = kat.setdefault(k, {"rp": 0.0, "qty": 0})
+            a["rp"] += harga_it * it["jumlah"] - (it.get("diskon") or 0)
+            a["qty"] += it["jumlah"]
+    peng_list = []
+    total_peng = 0.0
+    for pg in db.query(models.Pengeluaran).all():
+        if pg.dibuat.date() == today:
+            ket = pg.keterangan if hasattr(pg, "keterangan") else pg.nama
+            peng_list.append((ket or "PENGELUARAN", pg.jumlah or 0))
+            total_peng += pg.jumlah or 0
+
+    def rp(x):
+        return "Rp " + format(int(round(x)), ",").replace(",", ".")
+
+    now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    L = []
+    L.append("MEKAR SARI")
+    L.append("Refill Perfumery")
+    L.append("-----------------------------------------")
+    L.append("Tanggal : " + now)
+    L.append("-----------------------------------------")
+    for k in ["BIBIT", "BOTOL", "CAMPURAN", "AKSESORIS"] + sorted([x for x in kat if x not in ("BIBIT", "BOTOL", "CAMPURAN", "AKSESORIS")]):
+        a = kat.get(k)
+        if not a or a["rp"] <= 0:
+            continue
+        L.append("- " + k + " : " + rp(a["rp"]) + " / " + str(a["qty"]) + " " + satuan.get(k, "PCS"))
+    L.append("-----------------------------------------")
+    L.append("PENGELUARAN")
+    if peng_list:
+        for ket, j in peng_list:
+            L.append("- " + str(ket) + " " + rp(j))
+    else:
+        L.append("- Tidak ada pengeluaran")
+    L.append("-----------------------------------------")
+    L.append("METODE PEMBAYARAN")
+    L.append("- TUNAI : " + rp(tunai))
+    L.append("- NON-TUNAI : " + rp(nontunai))
+    L.append("-----------------------------------------")
+    L.append("- TOTAL OMZET : " + rp(omzet))
+    return {"text": "\n".join(L), "omzet": omzet, "tunai": tunai, "nontunai": nontunai, "pengeluaran": total_peng}
