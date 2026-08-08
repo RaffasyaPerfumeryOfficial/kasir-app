@@ -504,72 +504,68 @@ def export_laporan(dari: str = "", sampai: str = "", db: Session = Depends(get_d
     )
 
 
+
+def hitung_laba(db, start_dt, end_dt):
+    trx = [t for t in transaksi_valid(db) if start_dt <= t.dibuat.date() <= end_dt]
+    rows = {}
+    for t in trx:
+        r = rows.setdefault(t.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0})
+        item_disc = 0.0
+        hpp_t = 0.0
+        for it in json.loads(t.items):
+            qty = it["jumlah"]
+            harga = it.get("harga") or 0
+            item_disc += it.get("diskon") or 0
+            p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            if p:
+                hpp_t += (p.harga_modal or 0) * qty
+        dtot = t.total_diskon or 0
+        net_t = t.total or 0
+        r["gross"] += net_t + item_disc + dtot
+        r["disc"] += item_disc + dtot
+        r["net"] += net_t
+        r["hpp"] += hpp_t
+    for pg in db.query(models.Pengeluaran).all():
+        if start_dt <= pg.dibuat.date() <= end_dt:
+            r = rows.setdefault(pg.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0})
+            r["op"] += pg.jumlah or 0
+    tot = {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0}
+    for r in rows.values():
+        for k in tot:
+            tot[k] += r[k]
+    return {"tot": tot, "rows": sorted(rows.items(), reverse=True)}
+
+
 @app.get("/labarugi")
-def labarugi(request: Request, dari: str = "", sampai: str = "", db: Session = Depends(get_db)):
-    dari_d = parse_date(dari)
-    sampai_d = parse_date(sampai)
-    rekap = {}
-    for t in transaksi_valid(db):
-        d = t.dibuat.date()
-        if dari_d and d < dari_d:
-            continue
-        if sampai_d and d > sampai_d:
-            continue
-        r = rekap.setdefault(
-            d,
-            {"tanggal": d.strftime("%d/%m/%Y"), "omzet": 0.0, "modal": 0.0, "pengeluaran": 0.0, "key": d},
-        )
-        r["omzet"] += t.total
-        r["modal"] += t.total_modal or 0.0
-    for p in db.query(models.Pengeluaran).all():
-        d = p.dibuat.date()
-        if dari_d and d < dari_d:
-            continue
-        if sampai_d and d > sampai_d:
-            continue
-        r = rekap.setdefault(
-            d,
-            {"tanggal": d.strftime("%d/%m/%Y"), "omzet": 0.0, "modal": 0.0, "pengeluaran": 0.0, "key": d},
-        )
-        r["pengeluaran"] += p.jumlah
-    rows = sorted(rekap.values(), key=lambda x: x["key"], reverse=True)
-    tot_omzet = 0.0
-    tot_modal = 0.0
-    tot_pengeluaran = 0.0
-    for r in rows:
-        r["laba"] = r["omzet"] - r["modal"] - r["pengeluaran"]
-        tot_omzet += r["omzet"]
-        tot_modal += r["modal"]
-        tot_pengeluaran += r["pengeluaran"]
-    tot_laba = tot_omzet - tot_modal - tot_pengeluaran
-    bulan = {}
-    for t in transaksi_valid(db):
-        key = t.dibuat.strftime("%Y-%m")
-        b = bulan.setdefault(key, {"bulan": key, "omzet": 0.0, "modal": 0.0, "pengeluaran": 0.0})
-        b["omzet"] += t.total
-        b["modal"] += t.total_modal or 0.0
-    for p in db.query(models.Pengeluaran).all():
-        key = p.dibuat.strftime("%Y-%m")
-        b = bulan.setdefault(key, {"bulan": key, "omzet": 0.0, "modal": 0.0, "pengeluaran": 0.0})
-        b["pengeluaran"] += p.jumlah
-    bulan_list = sorted(bulan.values(), key=lambda x: x["bulan"], reverse=True)
-    for b in bulan_list:
-        b["laba"] = b["omzet"] - b["modal"] - b["pengeluaran"]
-        b["margin"] = (b["laba"] / b["omzet"] * 100) if b["omzet"] else 0.0
-    return templates.TemplateResponse(
-        request,
-        "labarugi.html",
-        {
-            "rows": rows,
-            "dari": dari,
-            "sampai": sampai,
-            "tot_omzet": tot_omzet,
-            "tot_modal": tot_modal,
-            "tot_pengeluaran": tot_pengeluaran,
-            "tot_laba": tot_laba,
-            "bulan_list": bulan_list,
-        },
-    )
+def labarugi_page(request: Request, start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from datetime import datetime
+    if not start_date or not end_date:
+        end_dt = datetime.now().date()
+        start_dt = end_dt
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    data = hitung_laba(db, start_dt, end_dt)
+    return templates.TemplateResponse(request, "labarugi.html", {
+        "start_date": start_dt.isoformat(),
+        "end_date": end_dt.isoformat(),
+        "tot": data["tot"],
+        "rows": data["rows"],
+    })
+
+
+@app.post("/labarugi/pengeluaran")
+def labarugi_pengeluaran(keterangan: str = Form(...), jumlah: float = Form(...), db: Session = Depends(get_db)):
+    peng = models.Pengeluaran()
+    if hasattr(peng, "keterangan"):
+        peng.keterangan = keterangan
+    elif hasattr(peng, "nama"):
+        peng.nama = keterangan
+    peng.jumlah = jumlah
+    db.add(peng)
+    db.commit()
+    return RedirectResponse("/labarugi", status_code=303)
+
 
 
 @app.post("/pengeluaran")
@@ -600,6 +596,12 @@ async def tutup_simpan(request: Request, db: Session = Depends(get_db)):
     db.add(models.RiwayatTutup(omzet=d.get("omzet", 0), tunai=d.get("tunai", 0), nontunai=d.get("nontunai", 0), pengeluaran=d.get("pengeluaran", 0), ringkasan=d.get("text", "")))
     db.commit()
     return {"ok": True}
+
+
+
+@app.get("/tutup/preview")
+def tutup_preview(db: Session = Depends(get_db)):
+    return buat_ringkasan(db)
 
 
 
@@ -1549,3 +1551,629 @@ def buat_ringkasan(db):
     L.append("-----------------------------------------")
     L.append("- TOTAL OMZET : " + rp(omzet))
     return {"text": "\n".join(L), "omzet": omzet, "tunai": tunai, "nontunai": nontunai, "pengeluaran": total_peng}
+
+MOODS = {
+    "manis": ["sweet", "vanilla", "caramel", "gourmand"],
+    "segar": ["citrus", "fresh", "aquatic", "mint"],
+    "malam": ["warm", "spicy", "oud", "amber"],
+    "siang": ["citrus", "fresh", "aquatic", "light"],
+    "kantor": ["fresh", "clean", "light", "citrus"],
+    "romantis": ["floral", "rose", "romantic"],
+    "sport": ["sporty", "fresh", "green"],
+    "mewah": ["luxurious", "woody", "smoky"],
+}
+
+def jawab_fitur(q, db):
+    import re as _re
+    ql = q.lower()
+    produk_list = db.query(models.Produk).all()
+
+    def rp(x):
+        return "Rp " + format(int(round(x)), ",").replace(",", ".")
+
+    if "briefing" in ql:
+        from datetime import date as _d, timedelta as _td
+        today = _d.today()
+        yest = today - _td(days=1)
+        tr = transaksi_valid(db)
+        om_y = sum(t.total or 0 for t in tr if t.dibuat.date() == yest)
+        n_y = sum(1 for t in tr if t.dibuat.date() == yest)
+        om_t = sum(t.total or 0 for t in tr if t.dibuat.date() == today)
+        jual = {}
+        for t in tr:
+            if t.dibuat.date() == yest:
+                for it in json.loads(t.items):
+                    jual[it["nama"]] = jual.get(it["nama"], 0) + it["jumlah"]
+        top = sorted(jual.items(), key=lambda x: -x[1])[:3]
+        rendah = [p for p in produk_list if (p.stok or 0) < 10][:6]
+        out = "BRIEFING PAGI\n"
+        out += "Kemarin: omzet " + rp(om_y) + " dari " + str(n_y) + " transaksi.\n"
+        out += "Hari ini sejauh ini: " + rp(om_t) + ".\n"
+        if top:
+            out += "Terlaris kemarin: " + ", ".join(a[0] + " (" + str(a[1]) + " pcs)" for a in top) + ".\n"
+        if rendah:
+            out += "Stok menipis: " + ", ".join(p.nama + " (" + str(p.stok) + ")" for p in rendah) + ".\n"
+        out += "Fokus hari ini: amankan stok terlaris, tawarkan parfum mirip yang terlaris, dan jaga stok bahan refill."
+        return out
+
+    if "untung" in ql or "simulasi" in ql or "profit" in ql:
+        tgt = cari_produk(ql, produk_list)
+        if tgt:
+            nums = [int(w) for w in _re.findall(r"\d+", q)]
+            qty = nums[0] if nums else 1
+            per = (tgt.harga or 0) - (tgt.harga_modal or 0)
+            out = "SIMULASI UNTUNG " + tgt.nama + "\n"
+            out += "Jual " + rp(tgt.harga or 0) + " - modal " + rp(tgt.harga_modal or 0) + " = untung " + rp(per) + " / pcs\n"
+            out += "Kalau terjual " + str(qty) + " pcs = UNTUNG " + rp(per * qty)
+            return out
+
+    for mood, keys in MOODS.items():
+        if mood in ql and ("rekom" in ql or "cocok" in ql or "acara" in ql or "untuk" in ql or "parfum" in ql or "buat" in ql):
+            hits = []
+            for p in produk_list:
+                nts = (N.get(p.nama) or "").lower()
+                if any(k in nts for k in keys):
+                    hits.append(p)
+            if hits:
+                hits.sort(key=lambda p: -(p.stok or 0))
+                out = "Rekomendasi suasana '" + mood + "':\n"
+                for i, p in enumerate(hits[:5], 1):
+                    out += str(i) + ". " + p.nama + " (stok " + str(p.stok) + ", " + rp(p.harga or 0) + ")\n"
+                out += "\nMau saya carikan yang mirip? Jawab: ya"
+                return out
+    return None
+
+@app.get("/struk/{trx_id}/print")
+def struk_print(trx_id: int, request: Request, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "Struk tidak ditemukan")
+    raw = json.loads(t.items)
+    for it in raw:
+        if not it.get("harga"):
+            p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            it["harga"] = p.harga if p else 0
+    return templates.TemplateResponse(request, "struk_print.html", {"t": t, "items": raw})
+
+def buat_ringkasan(db):
+    from datetime import date as _d, timedelta as _td
+    today = _d.today()
+    trx = [t for t in transaksi_valid(db) if t.dibuat.date() == today]
+    omzet = sum(t.total or 0 for t in trx)
+    tunai = sum(t.p_tunai or 0 for t in trx)
+    nontunai = sum(t.p_nontunai or 0 for t in trx)
+    satuan = {"BIBIT": "ML", "BOTOL": "PCS", "CAMPURAN": "ML", "AKSESORIS": "ML"}
+    kat = {}
+    for t in trx:
+        for it in json.loads(t.items):
+            p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            k = ((p.kategori or "LAIN").upper()) if p else "LAIN"
+            harga_it = it.get("harga") or (p.harga if p else 0) or 0
+            a = kat.setdefault(k, {"rp": 0.0, "qty": 0})
+            a["rp"] += harga_it * it["jumlah"] - (it.get("diskon") or 0)
+            a["qty"] += it["jumlah"]
+    peng_list = []
+    total_peng = 0.0
+    for pg in db.query(models.Pengeluaran).all():
+        if pg.dibuat.date() == today:
+            ket = pg.keterangan if hasattr(pg, "keterangan") else pg.nama
+            peng_list.append((ket or "PENGELUARAN", pg.jumlah or 0))
+            total_peng += pg.jumlah or 0
+    def rp(x):
+        return "Rp " + format(int(round(x)), ",").replace(",", ".")
+    now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    L = []
+    L.append("MEKAR SARI")
+    L.append("Refill Perfumery")
+    L.append("-----------------------------------------")
+    L.append("Tanggal : " + now)
+    L.append("-----------------------------------------")
+    for k in ["BIBIT", "BOTOL", "CAMPURAN", "AKSESORIS"] + sorted([x for x in kat if x not in ("BIBIT", "BOTOL", "CAMPURAN", "AKSESORIS")]):
+        a = kat.get(k)
+        if not a or a["rp"] <= 0:
+            continue
+        L.append("- " + k + " : " + rp(a["rp"]) + " / " + str(a["qty"]) + " " + satuan.get(k, "PCS"))
+    L.append("-----------------------------------------")
+    L.append("PENGELUARAN")
+    if peng_list:
+        for ket, j in peng_list:
+            L.append("- " + str(ket) + " " + rp(j))
+    else:
+        L.append("- Tidak ada pengeluaran")
+    L.append("-----------------------------------------")
+    L.append("METODE PEMBAYARAN")
+    L.append("- TUNAI : " + rp(tunai))
+    L.append("- NON-TUNAI : " + rp(nontunai))
+    L.append("-----------------------------------------")
+    L.append("- TOTAL OMZET : " + rp(omzet))
+    return {"text": "\n".join(L), "omzet": omzet, "tunai": tunai, "nontunai": nontunai, "pengeluaran": total_peng}
+
+@app.get("/laporan/laba_rugi/excel")
+def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    from datetime import datetime, timedelta
+    from fastapi.responses import StreamingResponse
+    if not start_date or not end_date:
+        today = datetime.now().date()
+        end_dt = today
+        start_dt = today - timedelta(days=29)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    data = hitung_laba(db, start_dt, end_dt)
+    tot = data["tot"]
+    peng_detail = [pg for pg in db.query(models.Pengeluaran).all() if start_dt <= pg.dibuat.date() <= end_dt]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Laba Rugi"
+    ws["A1"] = "SALES COUNTER"
+    ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"
+    ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"
+    ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
+    bold = Font(bold=True)
+    for r in range(1, 5):
+        ws.cell(row=r, column=1).font = bold
+    ws["A6"] = "LAPORAN LABA RUGI"
+    ws["A6"].font = Font(bold=True, size=14)
+    ws.merge_cells("A6:H6")
+    ws["A6"].alignment = Alignment(horizontal="center")
+    heads = ["No", "Tanggal", "Gross Sales", "Diskon", "Pendapatan", "Beban HPP", "Beban Operasional", "Laba Bersih"]
+    for col, h in enumerate(heads, 1):
+        c = ws.cell(row=8, column=col, value=h)
+        c.font = bold
+        c.alignment = Alignment(horizontal="center")
+    row = 9
+    for i, (d, r) in enumerate(data["rows"], 1):
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=d.strftime("%d/%m/%Y"))
+        ws.cell(row=row, column=3, value=r["gross"])
+        ws.cell(row=row, column=4, value=r["disc"])
+        ws.cell(row=row, column=5, value=r["net"])
+        ws.cell(row=row, column=6, value=r["hpp"])
+        ws.cell(row=row, column=7, value=r["op"])
+        ws.cell(row=row, column=8, value=r["net"] - r["hpp"] - r["op"])
+        row += 1
+    row += 1
+    ws.cell(row=row, column=2, value="TOTAL").font = bold
+    ws.cell(row=row, column=3, value=tot["gross"]).font = bold
+    ws.cell(row=row, column=4, value=tot["disc"]).font = bold
+    ws.cell(row=row, column=5, value=tot["net"]).font = bold
+    ws.cell(row=row, column=6, value=tot["hpp"]).font = bold
+    ws.cell(row=row, column=7, value=tot["op"]).font = bold
+    ws.cell(row=row, column=8, value=tot["net"] - tot["hpp"] - tot["op"]).font = bold
+    for col, w in zip("ABCDEFGH", [6, 14, 14, 12, 14, 14, 18, 14]):
+        ws.column_dimensions[col].width = w
+    for r in ws.iter_rows(min_row=9, max_row=row, min_col=3, max_col=8):
+        for c in r:
+            if isinstance(c.value, (int, float)):
+                c.number_format = "#,##0"
+    row += 2
+    ws.cell(row=row, column=1, value="RINCIAN BEBAN OPERASIONAL").font = bold
+    row += 1
+    for col, h in enumerate(["No", "Tanggal", "Beban Operasional (Rp)", "Keterangan"], 1):
+        c = ws.cell(row=row, column=col, value=h)
+        c.font = bold
+    row += 1
+    for i, pg in enumerate(sorted(peng_detail, key=lambda x: x.dibuat), 1):
+        ket = pg.keterangan if hasattr(pg, "keterangan") else pg.nama
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=pg.dibuat.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row, column=3, value=pg.jumlah or 0)
+        ws.cell(row=row, column=4, value=ket or "")
+        row += 1
+    ws.column_dimensions["D"].width = 40
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    fn = "LabaRugi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+
+
+
+@app.get("/transaksi/excel")
+def download_transaksi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    from datetime import datetime, timedelta
+    from fastapi.responses import StreamingResponse
+    if not start_date or not end_date:
+        today = datetime.now().date()
+        end_dt = today
+        start_dt = today - timedelta(days=29)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    trx_list = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id).all() if start_dt <= t.dibuat.date() <= end_dt]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Transaksi"
+    ws["A1"] = "SALES COUNTER"
+    ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"
+    ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"
+    ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
+    bold = Font(bold=True)
+    for r in range(1, 5):
+        ws.cell(row=r, column=1).font = bold
+    ws["A6"] = "DAFTAR TRANSAKSI (PER STRUK)"
+    ws["A6"].font = Font(bold=True, size=14)
+    ws.merge_cells("A6:G6")
+    ws["A6"].alignment = Alignment(horizontal="center")
+    for col, h in enumerate(["No", "Waktu", "Kode Struk", "Metode", "Items", "Total (Rp)", "Status"], 1):
+        c = ws.cell(row=8, column=col, value=h)
+        c.font = bold
+        c.alignment = Alignment(horizontal="center")
+    row = 9
+    for i, t in enumerate(trx_list, 1):
+        items = "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items))
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=t.dibuat.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row, column=3, value=t.kode_trx or ("TRX-" + str(t.id)))
+        ws.cell(row=row, column=4, value=t.metode or "TUNAI")
+        ws.cell(row=row, column=5, value=items)
+        ws.cell(row=row, column=6, value=t.total or 0)
+        ws.cell(row=row, column=7, value="VOID" if t.void else "SAH")
+        row += 1
+    row += 1
+    ws.cell(row=row, column=5, value="TOTAL").font = bold
+    ws.cell(row=row, column=6, value=sum(t.total or 0 for t in trx_list if not t.void)).font = bold
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 28
+    ws.column_dimensions["D"].width = 22
+    ws.column_dimensions["E"].width = 50
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 8
+    for r in ws.iter_rows(min_row=9, max_row=row, min_col=6, max_col=6):
+        for c in r:
+            if isinstance(c.value, (int, float)):
+                c.number_format = "#,##0"
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    fn = "Transaksi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+
+
+
+@app.get("/transaksi/excel")
+def download_transaksi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    from datetime import datetime, timedelta
+    from fastapi.responses import StreamingResponse
+    if not start_date or not end_date:
+        today = datetime.now().date()
+        end_dt = today
+        start_dt = today - timedelta(days=29)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    trx_list = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id).all() if start_dt <= t.dibuat.date() <= end_dt]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Transaksi"
+    ws["A1"] = "SALES COUNTER"
+    ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"
+    ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"
+    ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
+    bold = Font(bold=True)
+    for r in range(1, 5):
+        ws.cell(row=r, column=1).font = bold
+    ws["A6"] = "DAFTAR TRANSAKSI (PER STRUK)"
+    ws["A6"].font = Font(bold=True, size=14)
+    ws.merge_cells("A6:G6")
+    ws["A6"].alignment = Alignment(horizontal="center")
+    for col, h in enumerate(["No", "Waktu", "Kode Struk", "Metode", "Items", "Total (Rp)", "Status"], 1):
+        c = ws.cell(row=8, column=col, value=h)
+        c.font = bold
+        c.alignment = Alignment(horizontal="center")
+    row = 9
+    for i, t in enumerate(trx_list, 1):
+        items = "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items))
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=t.dibuat.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row, column=3, value=t.kode_trx or ("TRX-" + str(t.id)))
+        ws.cell(row=row, column=4, value=t.metode or "TUNAI")
+        ws.cell(row=row, column=5, value=items)
+        ws.cell(row=row, column=6, value=t.total or 0)
+        ws.cell(row=row, column=7, value="VOID" if t.void else "SAH")
+        row += 1
+    row += 1
+    ws.cell(row=row, column=5, value="TOTAL").font = bold
+    ws.cell(row=row, column=6, value=sum(t.total or 0 for t in trx_list if not t.void)).font = bold
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 28
+    ws.column_dimensions["D"].width = 22
+    ws.column_dimensions["E"].width = 50
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 8
+    for r in ws.iter_rows(min_row=9, max_row=row, min_col=6, max_col=6):
+        for c in r:
+            if isinstance(c.value, (int, float)):
+                c.number_format = "#,##0"
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    fn = "Transaksi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+
+
+
+@app.get("/transaksi/excel")
+def download_transaksi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    from datetime import datetime, timedelta
+    from fastapi.responses import StreamingResponse
+    if not start_date or not end_date:
+        today = datetime.now().date()
+        end_dt = today
+        start_dt = today - timedelta(days=29)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    trx_list = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id).all() if start_dt <= t.dibuat.date() <= end_dt]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Transaksi"
+    ws["A1"] = "SALES COUNTER"
+    ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"
+    ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"
+    ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
+    bold = Font(bold=True)
+    for r in range(1, 5):
+        ws.cell(row=r, column=1).font = bold
+    ws["A6"] = "DAFTAR TRANSAKSI (PER STRUK)"
+    ws["A6"].font = Font(bold=True, size=14)
+    ws.merge_cells("A6:G6")
+    ws["A6"].alignment = Alignment(horizontal="center")
+    for col, h in enumerate(["No", "Waktu", "Kode Struk", "Metode", "Items", "Total (Rp)", "Status"], 1):
+        c = ws.cell(row=8, column=col, value=h)
+        c.font = bold
+        c.alignment = Alignment(horizontal="center")
+    row = 9
+    for i, t in enumerate(trx_list, 1):
+        items = "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items))
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=t.dibuat.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row, column=3, value=t.kode_trx or ("TRX-" + str(t.id)))
+        ws.cell(row=row, column=4, value=t.metode or "TUNAI")
+        ws.cell(row=row, column=5, value=items)
+        ws.cell(row=row, column=6, value=t.total or 0)
+        ws.cell(row=row, column=7, value="VOID" if t.void else "SAH")
+        row += 1
+    row += 1
+    ws.cell(row=row, column=5, value="TOTAL").font = bold
+    ws.cell(row=row, column=6, value=sum(t.total or 0 for t in trx_list if not t.void)).font = bold
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 28
+    ws.column_dimensions["D"].width = 22
+    ws.column_dimensions["E"].width = 50
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 8
+    for r in ws.iter_rows(min_row=9, max_row=row, min_col=6, max_col=6):
+        for c in r:
+            if isinstance(c.value, (int, float)):
+                c.number_format = "#,##0"
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    fn = "Transaksi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+
+
+
+@app.get("/transaksi/excel")
+def download_transaksi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    from datetime import datetime, timedelta
+    from fastapi.responses import StreamingResponse
+    if not start_date or not end_date:
+        today = datetime.now().date()
+        end_dt = today
+        start_dt = today - timedelta(days=29)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    trx_list = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id).all() if start_dt <= t.dibuat.date() <= end_dt]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Transaksi"
+    ws["A1"] = "SALES COUNTER"
+    ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"
+    ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"
+    ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
+    bold = Font(bold=True)
+    for r in range(1, 5):
+        ws.cell(row=r, column=1).font = bold
+    ws["A6"] = "DAFTAR TRANSAKSI (PER STRUK)"
+    ws["A6"].font = Font(bold=True, size=14)
+    ws.merge_cells("A6:G6")
+    ws["A6"].alignment = Alignment(horizontal="center")
+    for col, h in enumerate(["No", "Waktu", "Kode Struk", "Metode", "Items", "Total (Rp)", "Status"], 1):
+        c = ws.cell(row=8, column=col, value=h)
+        c.font = bold
+        c.alignment = Alignment(horizontal="center")
+    row = 9
+    for i, t in enumerate(trx_list, 1):
+        items = "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items))
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=t.dibuat.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row, column=3, value=t.kode_trx or ("TRX-" + str(t.id)))
+        ws.cell(row=row, column=4, value=t.metode or "TUNAI")
+        ws.cell(row=row, column=5, value=items)
+        ws.cell(row=row, column=6, value=t.total or 0)
+        ws.cell(row=row, column=7, value="VOID" if t.void else "SAH")
+        row += 1
+    row += 1
+    ws.cell(row=row, column=5, value="TOTAL").font = bold
+    ws.cell(row=row, column=6, value=sum(t.total or 0 for t in trx_list if not t.void)).font = bold
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 28
+    ws.column_dimensions["D"].width = 22
+    ws.column_dimensions["E"].width = 50
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 8
+    for r in ws.iter_rows(min_row=9, max_row=row, min_col=6, max_col=6):
+        for c in r:
+            if isinstance(c.value, (int, float)):
+                c.number_format = "#,##0"
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    fn = "Transaksi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+
+
+
+@app.get("/laporan/laba_rugi/excel")
+def download_laba_rugi_excel(
+    start_date: str = "",
+    end_date: str = "",
+    db: Session = Depends(get_db)
+):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from io import BytesIO
+    from datetime import datetime, timedelta
+    from fastapi.responses import StreamingResponse
+    
+    if not start_date or not end_date:
+        today = datetime.now().date()
+        end_dt = today
+        start_dt = today - timedelta(days=29)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    
+    trx_list = [
+        t for t in transaksi_valid(db)
+        if start_dt <= t.dibuat.date() <= end_dt
+    ]
+    
+    total_omzet = sum(t.total or 0 for t in trx_list)
+    total_pengeluaran = sum(
+        pg.jumlah or 0 for pg in db.query(models.Pengeluaran).all()
+        if start_dt <= pg.dibuat.date() <= end_dt
+    )
+    laba_kotor = total_omzet - total_pengeluaran
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Laba Rugi"
+    
+    ws["A1"] = "SALES COUNTER"
+    ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"
+    ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"
+    ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    periode_str = f"{start_dt.strftime('%d-%B-%Y').upper()} SAMPAI {end_dt.strftime('%d-%B-%Y').upper()}"
+    ws["B4"] = periode_str
+    
+    bold_font = Font(bold=True)
+    for row in range(1, 5):
+        ws.cell(row=row, column=1).font = bold_font
+    
+    ws["A6"] = "LAPORAN LABA RUGI"
+    ws["A6"].font = Font(bold=True, size=14)
+    ws.merge_cells("A6:D6")
+    ws["A6"].alignment = Alignment(horizontal="center")
+    
+    headers = ["No", "Keterangan", "Debit (Rp)", "Kredit (Rp)"]
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=8, column=col, value=header)
+        cell.font = bold_font
+        cell.alignment = Alignment(horizontal="center")
+    
+    row_num = 9
+    no = 1
+    
+    ws.cell(row=row_num, column=1, value=no)
+    ws.cell(row=row_num, column=2, value="Pendapatan Kotor (Omzet)")
+    ws.cell(row=row_num, column=4, value=total_omzet)
+    row_num += 1
+    no += 1
+    
+    ws.cell(row=row_num, column=1, value=no)
+    ws.cell(row=row_num, column=2, value="Total Pengeluaran")
+    ws.cell(row=row_num, column=3, value=total_pengeluaran)
+    row_num += 1
+    no += 1
+    
+    ws.cell(row=row_num, column=1, value=no)
+    ws.cell(row=row_num, column=2, value="LABA BERSIH")
+    ws.cell(row=row_num, column=4, value=laba_kotor)
+    ws.cell(row=row_num, column=2).font = bold_font
+    ws.cell(row=row_num, column=4).font = bold_font
+    row_num += 1
+    
+    row_num += 1
+    ws.cell(row=row_num, column=1, value="DETAIL TRANSAKSI").font = bold_font
+    row_num += 1
+    detail_headers = ["No", "Waktu", "Kode Struk", "Metode", "Total"]
+    for col, h in enumerate(detail_headers, 1):
+        ws.cell(row=row_num, column=col, value=h).font = bold_font
+    row_num += 1
+    
+    for i, t in enumerate(trx_list[:50], 1):
+        ws.cell(row=row_num, column=1, value=i)
+        ws.cell(row=row_num, column=2, value=t.dibuat.strftime("%d/%m/%Y %H:%M"))
+        ws.cell(row=row_num, column=3, value=t.kode_trx or f"TRX-{t.id}")
+        ws.cell(row=row_num, column=4, value=t.metode or "TUNAI")
+        ws.cell(row=row_num, column=5, value=t.total or 0)
+        row_num += 1
+    
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 35
+    ws.column_dimensions["C"].width = 15
+    ws.column_dimensions["D"].width = 15
+    ws.column_dimensions["E"].width = 15
+    
+    for row in ws.iter_rows(min_row=9, max_row=row_num, min_col=3, max_col=5):
+        for cell in row:
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = '#,##0'
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"LabaRugi_{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

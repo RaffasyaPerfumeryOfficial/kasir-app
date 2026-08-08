@@ -52,4 +52,14 @@ c.scrollTop=c.scrollHeight;
 }
 lihatRiwayat();
 </script>
+
+<div style="margin:10px 0"><button style="background:#0ea5e9;color:#fff;border:0;padding:10px 16px;border-radius:999px;font-weight:600" onclick="kirimBriefing()">🌅 Briefing Pagi</button></div>
+<script>
+function kirimBriefing(){
+var i=document.querySelector('input[placeholder*="Tulis"]');
+if(i){i.value='briefing pagi';}
+var b=[].slice.call(document.querySelectorAll('button')).find(function(x){return x.textContent.trim()==='Kirim';});
+if(b)b.click();
+}
+</script>
 {% endblock %}

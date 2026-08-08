@@ -142,3 +142,4 @@ class RiwayatTutup(Base):
     pengeluaran = Column(Float, default=0)
     ringkasan = Column(String)
     dibuat = Column(DateTime, default=datetime.now)
+

@@ -2,60 +2,57 @@
 {% block title %}Laba Rugi{% endblock %}
 {% block content %}
 <div class="topbar"><h2>Laba Rugi</h2></div>
-<div class="stat">
-  <div class="card"><h3>Omzet</h3><p>Rp {{ "%0.0f"|format(tot_omzet) }}</p></div>
-  <div class="card"><h3>Modal</h3><p>Rp {{ "%0.0f"|format(tot_modal) }}</p></div>
-  <div class="card"><h3>Pengeluaran</h3><p>Rp {{ "%0.0f"|format(tot_pengeluaran) }}</p></div>
-  <div class="card" style="border-left:4px solid var(--success)"><h3>Keuntungan</h3><p style="color:{{ 'var(--danger)' if tot_laba < 0 else 'var(--success)' }}">Rp {{ "%0.0f"|format(tot_laba) }}</p></div>
+<div class="card" style="margin:15px 0">
+  <form method="get" action="/labarugi" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="date" name="start_date" value="{{ start_date }}" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <span>s/d</span>
+    <input type="date" name="end_date" value="{{ end_date }}" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <button type="submit">Tampilkan</button>
+  </form>
+  <form method="get" action="/laporan/laba_rugi/excel" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+    <input type="date" name="start_date" value="{{ start_date }}" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <span>s/d</span>
+    <input type="date" name="end_date" value="{{ end_date }}" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <button type="submit" style="background:#16a34a">📥 Download Excel</button>
+  </form>
 </div>
-<div class="grid" style="margin-top:20px">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
+  <div class="card"><h3 style="color:var(--muted);font-size:13px">GROSS SALES</h3><p style="font-size:22px;font-weight:800">Rp {{ "%0.0f"|format(tot.gross) }}</p></div>
+  <div class="card"><h3 style="color:var(--muted);font-size:13px">DISKON</h3><p style="font-size:22px;font-weight:800;color:var(--danger)">Rp {{ "%0.0f"|format(tot.disc) }}</p></div>
+  <div class="card"><h3 style="color:var(--muted);font-size:13px">PENDAPATAN</h3><p style="font-size:22px;font-weight:800">Rp {{ "%0.0f"|format(tot.net) }}</p></div>
+  <div class="card"><h3 style="color:var(--muted);font-size:13px">BEBAN HPP</h3><p style="font-size:22px;font-weight:800;color:#d97706">Rp {{ "%0.0f"|format(tot.hpp) }}</p></div>
+  <div class="card"><h3 style="color:var(--muted);font-size:13px">BEBAN OPERASIONAL</h3><p style="font-size:22px;font-weight:800;color:#d97706">Rp {{ "%0.0f"|format(tot.op) }}</p></div>
+  <div class="card" style="border-left:4px solid var(--success)"><h3 style="color:var(--muted);font-size:13px">LABA BERSIH</h3><p style="font-size:22px;font-weight:800;color:var(--success)">Rp {{ "%0.0f"|format(tot.net - tot.hpp - tot.op) }}</p></div>
+</div>
+<div class="grid">
   <div class="card">
-    <h3 style="margin-bottom:12px">Klik Pengeluaran</h3>
-    <form method="post" action="/pengeluaran">
+    <h3>Catat Beban Operasional</h3>
+    <form method="post" action="/labarugi/pengeluaran" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
       <input name="keterangan" placeholder="Keterangan (misal: beli botol, listrik)" required>
       <input name="jumlah" type="number" placeholder="Jumlah (Rp)" required>
-      <button class="btn-danger" style="width:100%">Catat Pengeluaran</button>
+      <button class="btn-danger" type="submit">Catat Pengeluaran</button>
     </form>
   </div>
   <div class="card">
-    <h3 style="margin-bottom:12px">Filter Tanggal</h3>
-    <form method="get" action="/labarugi" style="display:flex;gap:10px;align-items:center">
-      <input type="date" name="dari" value="{{ dari }}" style="margin:0">
-      <span>s/d</span>
-      <input type="date" name="sampai" value="{{ sampai }}" style="margin:0">
-      <button type="submit">Tampilkan</button>
-    </form>
+    <h3>Rincian per Hari</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%">
+      <tr><th>Tanggal</th><th style="text-align:right">Gross</th><th style="text-align:right">Diskon</th><th style="text-align:right">Pendapatan</th><th style="text-align:right">HPP</th><th style="text-align:right">Operasional</th><th style="text-align:right">Laba</th></tr>
+      {% for d, r in rows %}
+      <tr>
+        <td>{{ d.strftime("%d/%m/%Y") }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(r.gross) }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(r.disc) }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(r.net) }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(r.hpp) }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(r.op) }}</td>
+        <td style="text-align:right"><strong>{{ "%0.0f"|format(r.net - r.hpp - r.op) }}</strong></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">Belum ada data di periode ini.</td></tr>
+      {% endfor %}
+    </table>
+    </div>
   </div>
-</div>
-<div class="card" style="margin-top:20px">
-  <h3 style="margin-bottom:12px">Per Hari</h3>
-  <table>
-    <tr><th>Tanggal</th><th>Omzet</th><th>Modal</th><th>Pengeluaran</th><th>Laba</th></tr>
-    {% for r in rows %}
-    <tr>
-      <td>{{ r.tanggal }}</td>
-      <td>{{ "%0.0f"|format(r.omzet) }}</td>
-      <td>{{ "%0.0f"|format(r.modal) }}</td>
-      <td>{{ "%0.0f"|format(r.pengeluaran) }}</td>
-      <td style="color:{{ 'var(--danger)' if r.laba < 0 else 'var(--success)' }};font-weight:700">{{ "%0.0f"|format(r.laba) }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-</div>
-<div class="card" style="margin-top:20px">
-  <h3 style="margin-bottom:12px">Total Keseluruhan Per Bulan</h3>
-  <table>
-    <tr><th>Bulan</th><th>Omzet</th><th>Modal</th><th>Pengeluaran</th><th>Keuntungan</th><th>Margin</th></tr>
-    {% for b in bulan_list %}
-    <tr>
-      <td>{{ b.bulan }}</td>
-      <td>{{ "%0.0f"|format(b.omzet) }}</td>
-      <td>{{ "%0.0f"|format(b.modal) }}</td>
-      <td>{{ "%0.0f"|format(b.pengeluaran) }}</td>
-      <td style="color:{{ 'var(--danger)' if b.laba < 0 else 'var(--success)' }};font-weight:700">{{ "%0.0f"|format(b.laba) }}</td>
-      <td>{{ "%0.1f"|format(b.margin) }}%</td>
-    </tr>
-    {% endfor %}
-  </table>
 </div>
 {% endblock %}
