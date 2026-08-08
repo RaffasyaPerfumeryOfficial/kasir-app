@@ -1,0 +1,51 @@
+﻿{% extends "base.html" %}
+{% block title %}Profil Produk{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h2>{{ produk.nama }}</h2>
+  <span class="badge">{{ produk.kode or '-' }} | {{ produk.kategori or '-' }} | {{ gender }}</span>
+</div>
+<div class="grid">
+  <div class="card">
+    <h3>Profil & Notes (Fragella)</h3>
+    <table style="width:100%">
+      <tr><td>Harga modal</td><td style="text-align:right">Rp {{ "%0.0f"|format(produk.harga_modal or 0) }}</td></tr>
+      <tr><td>Harga jual</td><td style="text-align:right">Rp {{ "%0.0f"|format(produk.harga) }}</td></tr>
+      <tr><td>Untung / pcs</td><td style="text-align:right"><strong>Rp {{ "%0.0f"|format((produk.harga or 0) - (produk.harga_modal or 0)) }}</strong></td></tr>
+    </table>
+    <p style="white-space:pre-line;margin-top:12px;background:#f1f5f9;padding:12px;border-radius:8px">{{ notes }}</p>
+  </div>
+  <div class="card">
+    <h3>Ringkasan Stok</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+      <span class="badge">Stok saat ini: {{ produk.stok }}</span>
+      <span class="badge" style="background:#fee2e2;color:var(--danger)">Keluar: {{ total_keluar }}</span>
+      <span class="badge" style="background:#dcfce7;color:var(--success)">Masuk: {{ total_masuk }}</span>
+    </div>
+    <h3>Catat Barang Masuk</h3>
+    <form method="post" action="/produk/{{ produk.id }}/masuk" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <input type="number" name="jumlah" placeholder="Jumlah" required style="margin:0;width:100px">
+      <input type="text" name="keterangan" placeholder="Keterangan (misal: beli 10 botol)" required style="margin:0;flex:1">
+      <button type="submit">+ Masuk</button>
+    </form>
+    <p style="color:var(--muted);margin-top:8px;font-size:13px">Keluar = otomatis dari transaksi (TRX) & void (VOID). Masuk manual = ketik keterangan sendiri.</p>
+  </div>
+</div>
+<div class="card" style="margin-top:20px">
+  <h3>Riwayat Keluar - Masuk</h3>
+  <table style="width:100%">
+    <tr><th>Waktu</th><th>Jenis</th><th style="text-align:right">Jumlah</th><th>Keterangan</th></tr>
+    {% for g in gerakan %}
+    <tr>
+      <td>{{ g.waktu.strftime("%d/%m/%Y %H:%M") }}</td>
+      <td>{% if g.jenis == 'KELUAR' %}<span class="badge" style="background:#fee2e2;color:var(--danger)">KELUAR</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">MASUK</span>{% endif %}</td>
+      <td style="text-align:right">{{ g.jumlah }}</td>
+      <td>{{ g.ket }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">Belum ada pergerakan stok.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<p style="margin-top:12px"><a href="/manajemen">Kembali ke Produk</a></p>
+{% endblock %}

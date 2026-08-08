@@ -1382,3 +1382,89 @@ def fetch_notes_online(produk_id: int, refresh: int = 0, db: Session = Depends(g
         pass
     return {"ok": True, "notes": text, "gratis": False}
 
+
+@app.get("/produk/{produk_id}")
+def produk_detail(produk_id: int, request: Request, db: Session = Depends(get_db)):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    gerakan = []
+    for t in db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all():
+        kode = t.kode_trx or ("TRX-" + str(t.id))
+        for it in json.loads(t.items):
+            if it["nama"] == produk.nama:
+                if t.void:
+                    gerakan.append({"waktu": t.dibuat, "jenis": "MASUK", "jumlah": it["jumlah"], "ket": "VOID " + kode})
+                else:
+                    gerakan.append({"waktu": t.dibuat, "jenis": "KELUAR", "jumlah": it["jumlah"], "ket": "TRX " + kode})
+    for m in db.query(models.StokMasuk).filter_by(nama=produk.nama).order_by(models.StokMasuk.id.desc()).all():
+        gerakan.append({"waktu": m.dibuat, "jenis": "MASUK", "jumlah": m.jumlah, "ket": m.keterangan or "MASUK BARANG"})
+    gerakan.sort(key=lambda x: x["waktu"], reverse=True)
+    total_keluar = sum(g["jumlah"] for g in gerakan if g["jenis"] == "KELUAR")
+    total_masuk = sum(g["jumlah"] for g in gerakan if g["jenis"] == "MASUK")
+    return templates.TemplateResponse(
+        request,
+        "produk_detail.html",
+        {
+            "produk": produk,
+            "gender": G.get(produk.nama, "unisex"),
+            "notes": format_notes(N.get(produk.nama)) or "Belum ada notes.",
+            "gerakan": gerakan,
+            "total_keluar": total_keluar,
+            "total_masuk": total_masuk,
+        },
+    )
+
+
+@app.post("/produk/{produk_id}/masuk")
+def stok_masuk(produk_id: int, jumlah: int = Form(...), keterangan: str = Form(""), db: Session = Depends(get_db)):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    produk.stok = (produk.stok or 0) + jumlah
+    db.add(models.StokMasuk(nama=produk.nama, jumlah=jumlah, keterangan=keterangan))
+    db.commit()
+    return RedirectResponse("/produk/" + str(produk_id), status_code=303)
+
+@app.get("/produk/{produk_id}")
+def produk_detail(produk_id: int, request: Request, db: Session = Depends(get_db)):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    gerakan = []
+    for t in db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all():
+        kode = t.kode_trx or ("TRX-" + str(t.id))
+        for it in json.loads(t.items):
+            if it["nama"] == produk.nama:
+                if t.void:
+                    gerakan.append({"waktu": t.dibuat, "jenis": "MASUK", "jumlah": it["jumlah"], "ket": "VOID " + kode})
+                else:
+                    gerakan.append({"waktu": t.dibuat, "jenis": "KELUAR", "jumlah": it["jumlah"], "ket": "TRX " + kode})
+    for m in db.query(models.StokMasuk).filter_by(nama=produk.nama).order_by(models.StokMasuk.id.desc()).all():
+        gerakan.append({"waktu": m.dibuat, "jenis": "MASUK", "jumlah": m.jumlah, "ket": m.keterangan or "MASUK BARANG"})
+    gerakan.sort(key=lambda x: x["waktu"], reverse=True)
+    total_keluar = sum(g["jumlah"] for g in gerakan if g["jenis"] == "KELUAR")
+    total_masuk = sum(g["jumlah"] for g in gerakan if g["jenis"] == "MASUK")
+    return templates.TemplateResponse(
+        request,
+        "produk_detail.html",
+        {
+            "produk": produk,
+            "gender": G.get(produk.nama, "unisex"),
+            "notes": format_notes(N.get(produk.nama)) or "Belum ada notes.",
+            "gerakan": gerakan,
+            "total_keluar": total_keluar,
+            "total_masuk": total_masuk,
+        },
+    )
+
+
+@app.post("/produk/{produk_id}/masuk")
+def stok_masuk(produk_id: int, jumlah: int = Form(...), keterangan: str = Form(""), db: Session = Depends(get_db)):
+    produk = db.get(models.Produk, produk_id)
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    produk.stok = (produk.stok or 0) + jumlah
+    db.add(models.StokMasuk(nama=produk.nama, jumlah=jumlah, keterangan=keterangan))
+    db.commit()
+    return RedirectResponse("/produk/" + str(produk_id), status_code=303)

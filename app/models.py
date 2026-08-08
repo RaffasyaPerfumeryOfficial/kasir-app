@@ -124,3 +124,11 @@ class PesanAI(Base):
     jawaban = Column(String)
     dibuat = Column(DateTime, default=datetime.now)
 
+
+class StokMasuk(Base):
+    __tablename__ = "stok_masuk"
+    id = Column(Integer, primary_key=True)
+    nama = Column(String)
+    jumlah = Column(Integer, default=0)
+    keterangan = Column(String)
+    dibuat = Column(DateTime, default=datetime.now)

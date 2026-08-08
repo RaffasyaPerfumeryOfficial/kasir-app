@@ -36,16 +36,16 @@
 <div class="grid">
   <div class="card">
     <div style="max-height:480px;overflow-y:auto">
-      <table>
-        <tr><th>Kode</th><th>Nama</th><th>Kategori</th><th>Modal</th><th>Jual</th><th>Stok</th><th>Aksi</th></tr>
+      <table style="width:100%;border-collapse:collapse">
+        <tr><th>Kode</th><th>Nama (klik untuk profil)</th><th>Kategori</th><th style="text-align:right">Modal</th><th style="text-align:right">Jual</th><th style="text-align:right">Stok</th><th>Aksi</th></tr>
         {% for p in produk_list %}
         <tr>
           <td>{{ p.kode or '' }}</td>
-          <td>{{ p.nama }}</td>
+          <td><a href="/produk/{{ p.id }}" style="font-weight:600;color:var(--primary)">{{ p.nama }}</a></td>
           <td>{{ p.kategori or '' }}</td>
-          <td>{{ "%0.0f"|format(p.harga_modal or 0) }}</td>
-          <td>{{ "%0.0f"|format(p.harga) }}</td>
-          <td>{{ p.stok }}</td>
+          <td style="text-align:right">{{ "%0.0f"|format(p.harga_modal or 0) }}</td>
+          <td style="text-align:right"><strong>{{ "%0.0f"|format(p.harga) }}</strong></td>
+          <td style="text-align:right">{{ p.stok }}</td>
           <td>
             <a href="/produk/edit/{{ p.id }}">Edit</a>
             <form method="post" action="/produk/hapus/{{ p.id }}" style="display:inline" onsubmit="return confirm('Hapus produk ini?')">
