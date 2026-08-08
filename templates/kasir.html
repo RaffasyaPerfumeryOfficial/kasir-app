@@ -4,6 +4,7 @@
 <div class="topbar">
   <h2>Kasir</h2>
   <span class="badge">{{ produk_list|length }} produk</span>
+  <button type="button" style="margin-left:auto;background:var(--danger)" onclick="openPengeluaran()">+ Pengeluaran</button>
 </div>
 <div class="grid">
   <div class="card">
@@ -25,7 +26,7 @@
           <td>{{ p.nama }}</td>
           <td>{{ "%0.0f"|format(p.harga) }}</td>
           <td>{{ p.stok }}</td>
-          <td><button onclick="tambah({{ p.id }},'{{ p.nama }}',{{ p.harga }})">+</button></td>
+          <td><button data-id="{{ p.id }}" data-nama="{{ p.nama }}" data-harga="{{ p.harga }}" onclick="tambahDari(this)">+</button></td>
         </tr>
         {% endfor %}
         </tbody>
@@ -100,6 +101,26 @@
   </div>
 </div>
 
+<div id="modalPengeluaran" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60">
+  <div style="background:white;max-width:420px;margin:10vh auto;padding:20px;border-radius:12px">
+    <h3>Catat Pengeluaran</h3>
+    <p style="margin:10px 0 6px">Nominal (Rp)</p>
+    <input id="peng_nominal" type="number" placeholder="0" onclick="this.value=''">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">
+      <button type="button" onclick="tambahNominal('peng_nominal',5000)">5.000</button>
+      <button type="button" onclick="tambahNominal('peng_nominal',10000)">10.000</button>
+      <button type="button" onclick="tambahNominal('peng_nominal',20000)">20.000</button>
+      <button type="button" onclick="tambahNominal('peng_nominal',50000)">50.000</button>
+    </div>
+    <p style="margin:10px 0 6px">Keterangan</p>
+    <input id="peng_ket" placeholder="misal: beli plastik, bensin, makan">
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button style="flex:1" onclick="simpanPengeluaran()">Simpan</button>
+      <button style="flex:1;background:#64748b" onclick="tutupPengeluaran()">Batal</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let cart=[];
 let T=0;
@@ -113,6 +134,7 @@ let it=cart.find(i=>i.id===id);
 if(it)it.jumlah++;else cart.push({id,nama,harga,jumlah:1,diskon:0});
 render();
 }
+function tambahDari(b){tambah(parseInt(b.dataset.id),b.dataset.nama,parseFloat(b.dataset.harga));}
 function setQty(id,v){
 let it=cart.find(i=>i.id===id);
 if(it){it.jumlah=Math.max(1,parseInt(v)||1);}
@@ -123,7 +145,7 @@ let it=cart.find(i=>i.id===id);
 if(it){it.diskon=Math.max(0,parseFloat(v)||0);}
 render();
 }
-function hapus(id){cart=cart.filter(i=>i.id!==id);render();}
+function hapus(id){cart=cart.filter(i=>i!==id&&i.id!==id);render();}
 function hapusSemua(){cart=[];render();}
 function render(){
 const tb=document.getElementById('cartbody');tb.innerHTML='';
@@ -181,6 +203,22 @@ document.getElementById('kembalian').textContent=b-T;
 function updateSplit(){
 const s=parseFloat(document.getElementById('split_tunai').value||0);
 document.getElementById('sisa').textContent=Math.max(0,T-s);
+}
+function openPengeluaran(){
+document.getElementById('peng_nominal').value='';
+document.getElementById('peng_ket').value='';
+document.getElementById('modalPengeluaran').style.display='block';
+}
+function tutupPengeluaran(){document.getElementById('modalPengeluaran').style.display='none';}
+function simpanPengeluaran(){
+const j=parseFloat(document.getElementById('peng_nominal').value||0);
+const k=document.getElementById('peng_ket').value.trim();
+if(j<=0){alert('Isi nominal dulu');return;}
+if(!k){alert('Isi keterangan dulu');return;}
+fetch('/pengeluaran/cepat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jumlah:j,keterangan:k})}).then(r=>r.json()).then(d=>{
+if(d.ok){alert('Pengeluaran Rp '+j.toLocaleString('id-ID')+' tercatat di hari ini.');tutupPengeluaran();}
+else{alert('Gagal menyimpan.');}
+});
 }
 function konfirmasi(){
 const m=document.querySelector('input[name=metode]:checked').value;

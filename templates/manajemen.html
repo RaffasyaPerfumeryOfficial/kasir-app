@@ -20,6 +20,17 @@
   </div>
   <div id="h_hasil" style="margin-top:12px"></div>
 </div>
+<div class="card" style="margin-bottom:20px;border-left:4px solid var(--success)">
+  <h3>Catat Barang Masuk Massal</h3>
+  <datalist id="produkList">{% for p in produk_list %}<option value="{{ p.nama }}">{% endfor %}</datalist>
+  <div id="rows"></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+    <button type="button" onclick="addRow()">+ Tambah Baris</button>
+    <span style="margin-left:auto;font-size:15px">Total: <strong id="totalBeli">Rp 0</strong></span>
+    <button type="button" style="background:var(--success)" onclick="selesaiBeli()">Selesai</button>
+  </div>
+  <p style="color:var(--muted);margin-top:8px;font-size:13px">Ketik nama (muncul saran otomatis) → jumlah → harga beli/pcs. Setelah "Selesai", total otomatis masuk ke PENGELUARAN hari ini.</p>
+</div>
 <div class="card" style="margin-bottom:20px;border-left:4px solid var(--danger)">
   <h3>Stok Menipis (&lt; 10)</h3>
   {% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}
@@ -71,6 +82,35 @@
   </div>
 </div>
 <script>
+function addRow(){
+const d=document.createElement('div');
+d.style.cssText='display:flex;gap:8px;margin-top:8px;flex-wrap:wrap';
+d.innerHTML='<input list="produkList" class="bn" placeholder="Nama produk (ketik untuk cari)" style="margin:0;flex:2;min-width:180px">'
++'<input type="number" class="bj" placeholder="Jumlah" style="margin:0;width:90px" oninput="hitung()">'
++'<input type="number" class="bh" placeholder="Harga beli/pcs" style="margin:0;width:130px" oninput="hitung()">'
++'<button type="button" class="btn-danger" onclick="this.parentNode.remove();hitung()">X</button>';
+document.getElementById('rows').appendChild(d);
+}
+function hitung(){
+let t=0;
+document.querySelectorAll('#rows > div').forEach(r=>{
+t+=(+(r.querySelector('.bj').value||0))*(+(r.querySelector('.bh').value||0));
+});
+document.getElementById('totalBeli').textContent='Rp '+t.toLocaleString('id-ID');
+}
+function selesaiBeli(){
+const rows=[];
+document.querySelectorAll('#rows > div').forEach(r=>{
+rows.push({nama:r.querySelector('.bn').value.trim(),jumlah:r.querySelector('.bj').value,harga:r.querySelector('.bh').value});
+});
+if(rows.length===0){alert('Tambahkan minimal satu baris.');return;}
+let t=0;rows.forEach(r=>{t+=(+r.jumlah||0)*(+r.harga||0);});
+if(!confirm('Total Rp '+t.toLocaleString('id-ID')+' akan dicatat sebagai PENGELUARAN hari ini dan stok bertambah. Lanjutkan?'))return;
+fetch('/stok/masuk_massal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(rows)}).then(r=>r.json()).then(d=>{
+alert('Tercatat! '+d.n+' produk masuk. Pengeluaran hari ini + Rp '+d.total.toLocaleString('id-ID'));
+window.location.reload();
+});
+}
 function formDataHarga(){
 const f=new FormData();
 f.append('scope',document.getElementById('h_scope').value);

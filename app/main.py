@@ -1468,3 +1468,56 @@ def stok_masuk(produk_id: int, jumlah: int = Form(...), keterangan: str = Form("
     db.add(models.StokMasuk(nama=produk.nama, jumlah=jumlah, keterangan=keterangan))
     db.commit()
     return RedirectResponse("/produk/" + str(produk_id), status_code=303)
+
+@app.post("/stok/masuk_massal")
+async def masuk_massal(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    total = 0
+    n = 0
+    for row in data:
+        nama = (row.get("nama") or "").strip()
+        try:
+            jumlah = int(row.get("jumlah") or 0)
+            harga = float(row.get("harga") or 0)
+        except Exception:
+            continue
+        if not nama or jumlah <= 0:
+            continue
+        p = db.query(models.Produk).filter_by(nama=nama).first()
+        if not p:
+            continue
+        p.stok = (p.stok or 0) + jumlah
+        db.add(models.StokMasuk(nama=nama, jumlah=jumlah, keterangan="BELI " + str(jumlah) + " pcs @ Rp " + str(int(harga))))
+        total += jumlah * harga
+        n += 1
+    if n > 0:
+        ket = "Pembelian stok massal (" + str(n) + " produk)"
+        peng = models.Pengeluaran()
+        if hasattr(peng, "keterangan"):
+            peng.keterangan = ket
+        elif hasattr(peng, "nama"):
+            peng.nama = ket
+        peng.jumlah = total
+        db.add(peng)
+    db.commit()
+    return {"ok": True, "total": total, "n": n}
+
+@app.post("/pengeluaran/cepat")
+async def pengeluaran_cepat(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    try:
+        jumlah = float(data.get("jumlah") or 0)
+    except Exception:
+        jumlah = 0
+    ket = (data.get("keterangan") or "").strip()
+    if jumlah <= 0 or not ket:
+        return {"ok": False}
+    peng = models.Pengeluaran()
+    if hasattr(peng, "keterangan"):
+        peng.keterangan = ket
+    elif hasattr(peng, "nama"):
+        peng.nama = ket
+    peng.jumlah = jumlah
+    db.add(peng)
+    db.commit()
+    return {"ok": True}
