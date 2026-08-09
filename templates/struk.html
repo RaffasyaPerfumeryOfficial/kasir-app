@@ -3,8 +3,11 @@
 {% block content %}
 <div class="card" style="max-width:440px;margin:20px auto;padding:20px">
   <div style="text-align:center">
+    <img src="/static/logo.png" style="width:72px;height:72px;object-fit:contain;margin:0 auto 6px;display:block">
     <h3 style="margin:0">MEKAR SARI</h3>
     <div style="color:var(--muted)">Refill Perfumery</div>
+    <div style="color:var(--muted);font-size:12px;margin-top:4px">Jl. Mekar Sari No.5, Bekasi Jaya, Kec. Bekasi Tim.,<br>Kota Bks, Jawa Barat 17112</div>
+    <div style="color:var(--muted);font-size:12px">HP: 0821-1897-1096</div>
   </div>
   <hr style="border-top:1px dashed #94a3b8">
   <table style="width:100%;font-size:14px">
@@ -39,7 +42,7 @@
   <div style="text-align:center;color:var(--muted)">Terima kasih 🙏<br>Parfum Anda, cerita Anda.</div>
 </div>
 <p style="text-align:center;display:flex;gap:8px;justify-content:center">
-  <button type="button" onclick="location.href=location.href+'/print'">🖨️ Cetak 80mm</button>
+  <button type="button" onclick="location.href=location.pathname+'/print'+(location.search.indexOf('src=riwayat')>=0?'?ulang=1':'')">🖨️ Cetak 80mm</button>
   <button type="button" style="background:#25D366" onclick="kirimWAStruk()">📱 Kirim via WhatsApp</button>
   <button type="button" style="background:#64748b" onclick="location.href='/kasir'">⬅ Kasir</button>
 </p>

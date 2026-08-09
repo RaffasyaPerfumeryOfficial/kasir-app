@@ -1651,18 +1651,27 @@ def jawab_fitur(q, db):
     return None
 
 @app.get("/struk/{trx_id}/print")
-def struk_print(trx_id: int, request: Request, db: Session = Depends(get_db)):
+def struk_print(trx_id: int, request: Request, ulang: str = "", db: Session = Depends(get_db)):
     t = db.get(models.Transaksi, trx_id)
     if not t:
         raise HTTPException(404, "Struk tidak ditemukan")
     raw = json.loads(t.items)
+    sub = 0.0
     for it in raw:
         if not it.get("harga"):
             pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
             it["harga"] = pr.harga if pr else 0
+        sub += (it["harga"] or 0) * it["jumlah"] - (it.get("diskon") or 0)
     pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
     ag = db.get(models.Anggota, pl.anggota_id) if pl else None
-    return templates.TemplateResponse(request, "struk_print.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
+    from datetime import datetime as _dt
+    now = _dt.now()
+    BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Des"]
+    now_str = "%02d %s %d, %02d.%02d" % (now.day, BULAN[now.month - 1], now.year, now.hour, now.minute)
+    return templates.TemplateResponse(request, "struk_print.html", {
+        "t": t, "items": raw, "ag": ag, "pl": pl,
+        "ulang": bool(ulang), "now_str": now_str, "sub": sub,
+        "nontunai": "NON" in (t.metode or "").upper()})
 
 
 
@@ -2296,6 +2305,9 @@ def buat_teks_struk(db, t):
     L = []
     L.append("MEKAR SARI")
     L.append("Refill Perfumery")
+    L.append("Jl. Mekar Sari No.5, Bekasi Jaya,")
+    L.append("Kec. Bekasi Tim., Kota Bks, Jawa Barat 17112")
+    L.append("HP: 0821-1897-1096")
     L.append("-----------------------------------------")
     L.append("No   : " + (t.kode_trx or ("TRX-" + str(t.id))))
     L.append("Waktu: " + t.dibuat.strftime("%d/%m/%Y %H:%M"))
@@ -2355,3 +2367,12 @@ def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
     pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
     ag = db.get(models.Anggota, pl.anggota_id) if pl else None
     return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
+
+
+def _rpx(x):
+    try:
+        x = float(x)
+    except Exception:
+        x = 0.0
+    return "Rp" + format(int(round(x)), ",").replace(",", ".")
+templates.env.filters["rpx"] = _rpx

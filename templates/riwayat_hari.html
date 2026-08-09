@@ -29,7 +29,7 @@
       <td style="text-align:right">{{ "%0.0f"|format(r.t.total or 0) }}</td>
       <td>{% if r.t.void %}<span class="badge" style="background:#fee2e2;color:var(--danger)">VOID</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">SAH</span>{% endif %}</td>
       <td>
-        <a href="/struk/{{ r.t.id }}">Struk</a>
+        <a href="/struk/{{ r.t.id }}?src=riwayat">Struk</a>
         {% if not r.t.void %}
         <form method="post" action="{{ r.void_action }}" style="display:inline" onsubmit="return confirm('Void transaksi ini?')">
           <button class="btn-danger" type="submit">Void</button>
