@@ -34,6 +34,7 @@ class ProdukOut(ProdukCreate):
 
 class Transaksi(Base):
     __tablename__ = "transaksi"
+    poin_dipakai = Column(Float, default=0)
 
     id = Column(Integer, primary_key=True, index=True)
     kode_trx = Column(String, default="")

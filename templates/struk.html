@@ -27,6 +27,7 @@
   <table style="width:100%;font-size:14px">
     <tr><td><strong>TOTAL</strong></td><td style="text-align:right"><strong>Rp {{ "%0.0f"|format(t.total or 0) }}</strong></td></tr>
     {% if t.total_diskon %}<tr><td>Diskon</td><td style="text-align:right">{{ "%0.0f"|format(t.total_diskon) }}</td></tr>{% endif %}
+    {% if t.poin_dipakai %}<tr><td>POIN dipakai</td><td style="text-align:right">-{{ "%0.0f"|format(t.poin_dipakai) }}</td></tr>{% endif %}
     <tr><td>Bayar</td><td style="text-align:right">{{ "%0.0f"|format(t.bayar or 0) }}</td></tr>
     <tr><td>Kembali</td><td style="text-align:right">{{ "%0.0f"|format(t.kembalian or 0) }}</td></tr>
   </table>
@@ -47,8 +48,7 @@
   <button type="button" style="background:#64748b" onclick="location.href='/kasir'">⬅ Kasir</button>
 </p>
 <script>
-function kirimWAStruk(){
-fetch(location.pathname+'/wa').then(r=>r.json()).then(d=>{window.open(d.url+encodeURIComponent(d.text),'_blank');});
-}
+var WA_URL="{{ wa_url|safe }}";
+function kirimWAStruk(){window.open(WA_URL,'_blank');}
 </script>
 {% endblock %}

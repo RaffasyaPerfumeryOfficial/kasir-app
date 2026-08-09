@@ -55,6 +55,10 @@ td { vertical-align: top; padding: 1px 0; }
 <div class="line"></div>
 <div style="text-align:right;font-size:16px;font-weight:bold">Grand Total : {{ (t.total or 0)|rpx }}</div>
 <div class="line"></div>
+{% if t.poin_dipakai %}
+<table><tr><td class="r" style="width:60%">POIN :</td><td class="r">{{ (t.poin_dipakai or 0)|rpx }}</td></tr></table>
+<div class="line"></div>
+{% endif %}
 {% if nontunai %}
 <table><tr><td class="r" style="width:60%">{{ t.metode }} :</td><td class="r">{{ (t.total or 0)|rpx }}</td></tr></table>
 <div class="line"></div>
@@ -73,9 +77,8 @@ td { vertical-align: top; padding: 1px 0; }
 <button onclick="history.back()">Kembali</button>
 </p>
 <script>
-function kirimWAStruk(){
-fetch(location.pathname.replace('/print','')+'/wa').then(r=>r.json()).then(d=>{window.open(d.url+encodeURIComponent(d.text),'_blank');});
-}
+var WA_URL="{{ wa_url|safe }}";
+function kirimWAStruk(){window.open(WA_URL,'_blank');}
 </script>
 </body>
 </html>

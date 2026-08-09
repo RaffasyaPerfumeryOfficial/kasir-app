@@ -9,7 +9,7 @@
 </div>
 <div class="grid">
   <div class="card">
-    <input id="cari" oninput="filter()" onclick="this.value='';filter()" placeholder="Klik di sini lalu ketik nama parfum / kode...">
+    <input id="cari" oninput="filter()"  placeholder="Klik di sini lalu ketik nama parfum / kode...">
     <select id="kat" onchange="filter()" style="width:100%;padding:10px;margin-bottom:10px;border:1px solid #cbd5e1;border-radius:8px">
       <option value="">Semua Kategori</option>
       {% for k in produk_list|map(attribute='kategori')|reject("none")|unique|sort %}
@@ -22,7 +22,7 @@
         <tr><th>Kode</th><th>Nama</th><th>Harga</th><th>Stok</th><th></th></tr>
         <tbody id="tbody">
         {% for p in produk_list %}
-        <tr data-nama="{{ (p.nama or '')|upper }} {{ (p.kode or '')|upper }}" data-kategori="{{ p.kategori or '' }}">
+        <tr class="produk-item" data-nama="{{ p.nama|lower }}" data-kat="{{ (p.kategori or '')|lower }}" data-nama="{{ (p.nama or '')|upper }} {{ (p.kode or '')|upper }}" data-kategori="{{ p.kategori or '' }}">
           <td>{{ p.kode or '' }}</td>
           <td>{{ p.nama }}</td>
           <td>{{ p.harga|rp }}</td>
@@ -48,58 +48,51 @@
   </div>
 </div>
 
-<div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50">
-  <div style="background:white;max-width:560px;margin:4vh auto;padding:20px;border-radius:12px;max-height:92vh;overflow-y:auto">
+<div id="modalBayar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60">
+  <div style="background:white;max-width:480px;margin:5vh auto;padding:20px;border-radius:12px;max-height:90vh;overflow-y:auto">
     <h3>Pembayaran</h3>
-    <p style="margin:10px 0">Total: <strong>Rp <span id="total2">0</span></strong></p>
-    <p style="margin:10px 0 6px">+ Anggota (poin 5% belanja BIBIT):</p>
-    <select id="anggota_sel" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:8px"><option value="">-- Tanpa Anggota --</option></select>
-    <label style="margin-right:12px"><input type="radio" name="metode" value="TUNAI" checked onchange="gantiMetode()" style="width:auto"> TUNAI</label>
-    <label style="margin-right:12px"><input type="radio" name="metode" value="NON" onchange="gantiMetode()" style="width:auto"> NON-TUNAI</label>
-    <label><input type="radio" name="metode" value="SPLIT" onchange="gantiMetode()" style="width:auto"> SPLIT</label>
-    <div id="sec-tunai">
-      <p style="margin:10px 0 6px">Uang diterima (klik kolom untuk bersihkan):</p>
-      <input id="bayar" type="text" inputmode="numeric" oninput="fmtInput(this);updateKembalian()" placeholder="0">
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">
-        <button type="button" onclick="uangPas()">UANG PAS</button>
-        <button type="button" onclick="tambahNominal('bayar',5000)">5.000</button>
-        <button type="button" onclick="tambahNominal('bayar',10000)">10.000</button>
-        <button type="button" onclick="tambahNominal('bayar',25000)">25.000</button>
-        <button type="button" onclick="tambahNominal('bayar',50000)">50.000</button>
-        <button type="button" onclick="tambahNominal('bayar',100000)">100.000</button>
+    <p style="margin:6px 0">Total: <strong>Rp <span id="total2">0</span></strong></p>
+    <p style="margin:8px 0 4px">+ Anggota (member):</p>
+    <select id="anggota_sel" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px" onchange="onAnggota()"></select>
+    <p id="poin_info" style="color:var(--muted);font-size:13px;margin:6px 0"></p>
+    <div id="box_poin" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;margin:8px 0">
+      <label style="font-weight:700"><input type="checkbox" id="pakai_poin" onchange="onPoinCheck()"> 💚 Gunakan POIN</label>
+      <input id="bayar_poin" type="text" inputmode="numeric" value="0" style="margin-top:6px" oninput="fmtInput(this);updateBayar()">
+      <p style="color:var(--muted);font-size:12px;margin:4px 0 0">Poin terpotong otomatis dari member (maks = poin tersedia).</p>
+    </div>
+    <p style="margin:12px 0 6px;font-weight:700">Metode Pembayaran:</p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <label><input type="radio" name="met" value="TUNAI" checked onchange="switchMet()"> TUNAI</label>
+      <label><input type="radio" name="met" value="NON" onchange="switchMet()"> NON-TUNAI</label>
+      <label><input type="radio" name="met" value="SPLIT" onchange="switchMet()"> SPLIT</label>
+    </div>
+    <div id="box_tunai" style="margin-top:10px">
+      <p style="font-weight:600;margin:4px 0">Tunai:</p>
+      <input id="bayar_tunai" type="text" inputmode="numeric" value="0" oninput="fmtInput(this);updateBayar()">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">
+        <button type="button" onclick="tambahNominal('bayar_tunai',10000)">10rb</button>
+        <button type="button" onclick="tambahNominal('bayar_tunai',20000)">20rb</button>
+        <button type="button" onclick="tambahNominal('bayar_tunai',50000)">50rb</button>
+        <button type="button" onclick="tambahNominal('bayar_tunai',100000)">100rb</button>
+        <button type="button" onclick="uangPas()">Uang Pas</button>
       </div>
-      <p>Kembalian: Rp <span id="kembalian">0</span></p>
+      <p>Kembalian: <strong id="kembalian">Rp 0</strong></p>
     </div>
-    <div id="sec-non" style="display:none">
-      <p style="margin:10px 0 6px">Pilih kanal (nominal otomatis sesuai total):</p>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel" value="QRIS GOPAY" checked style="width:auto"> QRIS GOPAY</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel" value="QRIS SPAY" style="width:auto"> QRIS SPAY</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel" value="QRIS DANA" style="width:auto"> QRIS DANA</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel" value="QRIS BCA" style="width:auto"> QRIS BCA</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel" value="QRIS BRI" style="width:auto"> QRIS BRI</label>
-      <p style="margin-top:8px">Nominal: <strong>Rp <span id="total3">0</span></strong></p>
+    <div id="box_non" style="display:none;margin-top:10px">
+      <p style="font-weight:600;margin:4px 0">Channel:</p>
+      <select id="metode_sel" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px" onchange="updateBayar()">
+        <option>QRIS GOPAY</option>
+        <option>QRIS SPAY</option>
+        <option>QRIS DANA</option>
+        <option>QRIS BCA</option>
+        <option>QRIS BRI</option>
+        <option>EDC BRI</option>
+      </select>
+      <p>Sisa non-tunai: <strong id="sisa">Rp 0</strong></p>
     </div>
-    <div id="sec-split" style="display:none">
-      <p style="margin:10px 0 6px">Isi tunai (sisanya otomatis NON-TUNAI):</p>
-      <input id="split_tunai" type="text" inputmode="numeric" oninput="fmtInput(this);updateSplit()" placeholder="0">
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">
-        <button type="button" onclick="tambahNominal('split_tunai',5000)">5.000</button>
-        <button type="button" onclick="tambahNominal('split_tunai',10000)">10.000</button>
-        <button type="button" onclick="tambahNominal('split_tunai',25000)">25.000</button>
-        <button type="button" onclick="tambahNominal('split_tunai',50000)">50.000</button>
-        <button type="button" onclick="tambahNominal('split_tunai',100000)">100.000</button>
-      </div>
-      <p>Sisa NON-TUNAI: Rp <span id="sisa">0</span></p>
-      <p style="margin:10px 0 6px">Kanal sisa:</p>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel2" value="QRIS GOPAY" checked style="width:auto"> QRIS GOPAY</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel2" value="QRIS SPAY" style="width:auto"> QRIS SPAY</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel2" value="QRIS DANA" style="width:auto"> QRIS DANA</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel2" value="QRIS BCA" style="width:auto"> QRIS BCA</label>
-      <label style="display:block;margin:4px 0"><input type="radio" name="channel2" value="QRIS BRI" style="width:auto"> QRIS BRI</label>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:16px">
-      <button style="flex:1" onclick="konfirmasi()">Konfirmasi Bayar</button>
-      <button style="flex:1;background:#64748b" onclick="tutupModal()">Batal</button>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button style="flex:1" onclick="bayar()">Konfirmasi</button>
+      <button style="flex:1;background:#64748b" onclick="document.getElementById('modalBayar').style.display='none'">Batal</button>
     </div>
   </div>
 </div>
@@ -167,6 +160,7 @@ let T=0;
 function fmtRp(n){n=Math.round(n||0);return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
 function numVal(id){return parseInt((document.getElementById(id).value||'').replace(/[^\d]/g,''))||0;}
 function fmtInput(el){el.value=el.value.replace(/[^\d]/g,'');if(el.value==='')return;el.value=fmtRp(parseInt(el.value));}
+function setTxt(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
 function hitung(){
 let t=0;cart.forEach(i=>{t+=i.harga*i.jumlah-(i.diskon||0)});
 let dt=numVal('diskon_all');
@@ -202,54 +196,105 @@ tr.innerHTML='<td>'+i.nama+'</td>'+
 '<td><button class="btn-danger" onclick="hapus('+i.id+')">x</button></td>';
 tb.appendChild(tr);});
 T=hitung();
-document.getElementById('total').textContent=fmtRp(T);
-document.getElementById('total2').textContent=fmtRp(T);
-document.getElementById('total3').textContent=fmtRp(T);
+setTxt('total',fmtRp(T));
+setTxt('total2',fmtRp(T));
+setTxt('total3',fmtRp(T));
 updateKembalian();updateSplit();
 }
 function filter(){
-const q=document.getElementById('cari').value.toUpperCase();
-const k=document.getElementById('kat').value;
-const show=q!==''||k!=='';
-document.getElementById('hint').style.display=show?'none':'block';
-document.querySelectorAll('#tbody tr').forEach(tr=>{
-if(!show){tr.style.display='none';return;}
-const okN=tr.dataset.nama.includes(q);
-const okK=!k||tr.dataset.kategori===k;
-tr.style.display=(okN&&okK)?'':'none';
+var q=(document.getElementById('cari').value||'').toLowerCase();
+var k=(document.getElementById('kat').value||'').toLowerCase();
+var semua=(k===''||k.indexOf('semua')===0);
+var items=document.querySelectorAll('.produk-item');
+items.forEach(function(el){
+var nama=el.dataset.nama||'';
+var kat=el.dataset.kat||'';
+var show=(nama.indexOf(q)!==-1)&&(semua||kat===k);
+el.style.display=show?'':'none';
 });
+}
+let anggotaData=null;
+function getMet(){var r=document.querySelector('input[name="met"]:checked');return r?r.value:'TUNAI';}
+function switchMet(){
+var m=getMet();
+document.getElementById('box_tunai').style.display=(m==='NON')?'none':'block';
+document.getElementById('box_non').style.display=(m==='TUNAI')?'none':'block';
+updateBayar();
+}
+function onPoinCheck(){
+if(document.getElementById('pakai_poin').checked&&anggotaData){
+document.getElementById('bayar_poin').value=fmtRp(Math.min(Math.floor(anggotaData.poin||0),T));
+}
+updateBayar();
 }
 function openBayar(){
 if(cart.length===0){alert('Keranjang kosong');return;}
+setTxt('total2',fmtRp(T));
+document.getElementById('bayar_poin').value='0';
+document.getElementById('bayar_tunai').value='0';
+document.getElementById('pakai_poin').checked=false;
+document.getElementById('box_poin').style.display='none';
+document.getElementById('poin_info').textContent='';
+document.querySelector('input[name="met"][value="TUNAI"]').checked=true;
+switchMet();
+anggotaData=null;
 fetch('/anggota/list').then(r=>r.json()).then(d=>{
 var s2=document.getElementById('anggota_sel');s2.innerHTML='<option value="">-- Tanpa Anggota --</option>';
-d.forEach(function(a){var o=document.createElement('option');o.value=a.id;o.textContent=a.label;s2.appendChild(o);});
+d.forEach(function(a2){var o=document.createElement('option');o.value=a2.id;o.textContent=a2.label;s2.appendChild(o);});
 });
-document.getElementById('bayar').value='';
-document.getElementById('split_tunai').value='';
-document.getElementById('modal').style.display='block';
-updateKembalian();updateSplit();
+document.getElementById('modalBayar').style.display='block';
+updateBayar();
 }
-function tutupModal(){document.getElementById('modal').style.display='none';}
-function gantiMetode(){
-const m=document.querySelector('input[name=metode]:checked').value;
-document.getElementById('sec-tunai').style.display=m==='TUNAI'?'block':'none';
-document.getElementById('sec-non').style.display=m==='NON'?'block':'none';
-document.getElementById('sec-split').style.display=m==='SPLIT'?'block':'none';
+function onAnggota(){
+var id=document.getElementById('anggota_sel').value;
+if(!id){anggotaData=null;document.getElementById('box_poin').style.display='none';document.getElementById('poin_info').textContent='';}
+else{fetch('/anggota/list').then(r=>r.json()).then(d=>{
+anggotaData=d.find(function(x){return String(x.id)===String(id);});
+document.getElementById('box_poin').style.display='block';
+document.getElementById('poin_info').textContent='Poin tersedia: '+fmtRp(anggotaData?anggotaData.poin:0);
+onPoinCheck();
+updateBayar();});}
+updateBayar();
 }
-function uangPas(){document.getElementById('bayar').value=fmtRp(T);updateKembalian();}
-function tambahNominal(idEl,v){
-const el=document.getElementById(idEl);
-el.value=fmtRp((parseInt(el.value.replace(/[^\d]/g,''))||0)+v);
-updateKembalian();updateSplit();
+function hitungBayar(){
+var poin=0;
+if(anggotaData&&document.getElementById('pakai_poin').checked){
+poin=Math.min(numVal('bayar_poin'),Math.floor(anggotaData.poin||0),T);
 }
-function updateKembalian(){
-const b=numVal('bayar');
-document.getElementById('kembalian').textContent=fmtRp(b-T);
+var sisaP=T-poin;
+var m=getMet();
+var tunai=0,non=0,kemb=0;
+if(m==='NON'){non=sisaP;}
+else{tunai=numVal('bayar_tunai');
+if(tunai>=sisaP){kemb=tunai-sisaP;}else if(m==='SPLIT'){non=sisaP-tunai;}}
+return {poin:poin,sisaP:sisaP,tunai:tunai,non:non,kemb:kemb,met:m};
 }
-function updateSplit(){
-const s=numVal('split_tunai');
-document.getElementById('sisa').textContent=fmtRp(Math.max(0,T-s));
+function updateBayar(){
+var h=hitungBayar();
+setTxt('kembalian',fmtRp(h.kemb));
+setTxt('sisa',fmtRp(h.non));
+}
+function updateKembalian(){updateBayar();}
+function updateSplit(){}
+function uangPas(){var h=hitungBayar();document.getElementById('bayar_tunai').value=fmtRp(h.sisaP);updateBayar();}
+function tambahNominal(idEl,v){var el=document.getElementById(idEl);el.value=fmtRp((parseInt(el.value.replace(/[^\d]/g,''))||0)+v);updateBayar();}
+function bayar(){
+if(cart.length===0){alert('Keranjang kosong');return;}
+var h=hitungBayar();
+if(h.met==='TUNAI'&&h.tunai<h.sisaP){alert('Tunai kurang! Kurang '+fmtRp(h.sisaP-h.tunai));return;}
+if(h.poin>0&&!anggotaData){alert('Pilih anggota dulu');return;}
+var ch=document.getElementById('metode_sel').value;
+var metode;
+if(h.non>0&&h.tunai>0)metode='TUNAI + NON-TUNAI ('+ch+')';
+else if(h.non>0)metode='NON-TUNAI ('+ch+')';
+else metode='TUNAI';
+if(h.poin>0)metode='POIN + '+metode;
+var dt=numVal('diskon_all');
+var payload={items:cart.map(function(i){return {produk_id:i.id,jumlah:i.jumlah,diskon:i.diskon||0};}),diskon_total:dt,anggota_id:(document.getElementById('anggota_sel').value||''),poin_dipakai:h.poin,tunai:h.tunai,kembalian:h.kemb,metode:metode};
+fetch('/transaksi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json()).then(d=>{
+if(d.ok){document.getElementById('modalBayar').style.display='none';window.location.href='/struk/'+d.id;}
+else{alert(d.detail||'Gagal');}
+});
 }
 const KATEGORI=[
 {t:"1. Beban Gaji & Kesejahteraan Karyawan",s:["Gaji & Upah","Bonus & THR","Kesejahteraan Karyawan","Pesangon & Kompensasi"]},

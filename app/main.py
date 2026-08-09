@@ -1,4 +1,5 @@
-﻿import json
+from fastapi import Body
+import json
 import re
 import random
 import secrets
@@ -393,72 +394,63 @@ def daftar_produk(db: Session = Depends(get_db)):
 
 
 @app.post("/transaksi")
-async def buat_transaksi(request: Request, db: Session = Depends(get_db)):
-    import random as _rnd, string as _str
-    d = await request.json()
-    items_in = d.get("items", [])
-    diskon_total = float(d.get("diskon_total") or 0)
-    anggota_id = d.get("anggota_id") or ""
+def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
+    import random, string
+    from datetime import datetime
+    items_in = payload.get("items", [])
+    if not items_in:
+        return JSONResponse({"ok": False, "detail": "Keranjang kosong"}, status_code=400)
     rows = []
     total = 0.0
     bibit_total = 0.0
     for it in items_in:
-        pr = db.get(models.Produk, int(it["produk_id"]))
-        if not pr:
-            continue
+        p = db.get(models.Produk, int(it["produk_id"]))
+        if not p:
+            return JSONResponse({"ok": False, "detail": "Produk tidak ditemukan"}, status_code=400)
+        qty = int(it["jumlah"])
+        if getattr(p, "stok", None) is not None and p.stok < qty:
+            return JSONResponse({"ok": False, "detail": "Stok kurang: " + p.nama}, status_code=400)
+    for it in items_in:
+        p = db.get(models.Produk, int(it["produk_id"]))
         qty = int(it["jumlah"])
         dsc = float(it.get("diskon") or 0)
-        sub = (pr.harga or 0) * qty - dsc
+        sub = (p.harga or 0) * qty - dsc
         total += sub
-        rows.append({"nama": pr.nama, "jumlah": qty, "harga": pr.harga, "diskon": dsc})
-        if (pr.kategori or "").upper() == "BIBIT":
+        if (p.kategori or "").upper() == "BIBIT":
             bibit_total += sub
-        pr.stok = (pr.stok or 0) - qty
-    total = max(0, total - diskon_total)
-    metode = d.get("metode", "TUNAI")
-    tunai = float(d.get("tunai") or 0)
-    channel = d.get("channel") or ""
-    if metode == "TUNAI":
-        p_tunai, p_non = total, 0.0
-        bayar = tunai if tunai > 0 else total
-        kembalian = bayar - total
-        label = "TUNAI"
-    elif metode == "NON":
-        p_tunai, p_non = 0.0, total
-        bayar = total
-        kembalian = 0
-        label = "NON-TUNAI (" + channel + ")"
-    else:
-        p_tunai = min(tunai, total)
-        p_non = total - p_tunai
-        bayar = total
-        kembalian = 0
-        label = "SPLIT (TUNAI+" + channel + ")"
-    now = datetime.now()
-    kode = "RP-MKRS/" + now.strftime("%d%m%y") + "/" + "".join(_rnd.choices(_str.ascii_uppercase + _str.digits, k=5))
-    trx = models.Transaksi(
-        kode_trx=kode,
-        items=json.dumps(rows),
-        total=total,
-        total_diskon=diskon_total + sum(float(it.get("diskon") or 0) for it in items_in),
-        bayar=bayar,
-        kembalian=kembalian,
-        metode=label,
-        p_tunai=p_tunai,
-        p_nontunai=p_non,
-    )
-    db.add(trx)
+        rows.append({"nama": p.nama, "jumlah": qty, "harga": p.harga, "diskon": dsc})
+        if getattr(p, "stok", None) is not None:
+            p.stok -= qty
+    dt = float(payload.get("diskon_total") or 0)
+    total -= dt
+    poin = int(payload.get("poin_dipakai") or 0)
+    ag_id = payload.get("anggota_id") or ""
+    ag = db.get(models.Anggota, int(ag_id)) if ag_id else None
+    if poin > 0:
+        if not ag:
+            return JSONResponse({"ok": False, "detail": "Pilih anggota dulu untuk pakai poin"}, status_code=400)
+        if (ag.poin or 0) < poin:
+            return JSONResponse({"ok": False, "detail": "Poin tidak cukup"}, status_code=400)
+    t = models.Transaksi()
+    t.items = json.dumps(rows)
+    t.total = total
+    t.total_diskon = dt + sum(r["diskon"] for r in rows)
+    t.metode = payload.get("metode") or "TUNAI"
+    t.bayar = float(payload.get("tunai") or 0)
+    t.kembalian = float(payload.get("kembalian") or 0)
+    t.poin_dipakai = poin
+    t.kode_trx = "RP-MKRS/" + datetime.now().strftime("%m%d%y") + "/" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    db.add(t)
+    db.flush()
+    if ag:
+        if poin > 0:
+            ag.poin = (ag.poin or 0) - poin
+        if bibit_total > 0 and poin == 0:
+            earn = int(bibit_total * 0.05)
+            ag.poin = (ag.poin or 0) + earn
+            db.add(models.PoinLog(anggota_id=ag.id, trx_id=t.id, poin=earn))
     db.commit()
-    db.refresh(trx)
-    poin = 0.0
-    if anggota_id:
-        poin = round(0.05 * bibit_total)
-        ag = db.get(models.Anggota, int(anggota_id))
-        if ag:
-            ag.poin = (ag.poin or 0) + poin
-            db.add(models.PoinLog(anggota_id=ag.id, trx_id=trx.id, poin=poin))
-            db.commit()
-    return {"ok": True, "id": trx.id, "kembalian": kembalian, "poin": poin}
+    return {"ok": True, "id": t.id}
 
 
 
@@ -2295,7 +2287,75 @@ def anggota_simpan(nama: str = Form(...), no_hp: str = Form(...), db: Session = 
 
 @app.get("/anggota/list")
 def anggota_list(db: Session = Depends(get_db)):
-    return [{"id": a.id, "label": a.nama + " | " + a.nomor_member} for a in db.query(models.Anggota).all()]
+    rows = db.query(models.Anggota).all()
+    return [{"id": a.id, "label": (a.nama or "") + " | " + (a.nomor_member or ""), "poin": a.poin or 0} for a in rows]
+
+
+
+@app.get("/struk/{trx_id}/wa")
+def struk_wa(trx_id: int, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "tidak ditemukan")
+    text = buat_teks_struk(db, t)
+    hp = ""
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    if pl:
+        ag = db.get(models.Anggota, pl.anggota_id)
+        if ag:
+            hp = ag.no_hp or ""
+    digits = "".join(ch for ch in hp if ch.isdigit())
+    if digits.startswith("0"):
+        digits = "62" + digits[1:]
+    url = ("https://wa.me/" + digits + "?text=" if digits else "https://wa.me/?text=")
+    return {"text": text, "url": url}
+
+
+@app.get("/struk/{trx_id}")
+def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
+    from urllib.parse import quote
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "Struk tidak ditemukan")
+    raw = json.loads(t.items)
+    for it in raw:
+        if not it.get("harga"):
+            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            it["harga"] = pr.harga if pr else 0
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
+    text = buat_teks_struk(db, t)
+    hp = (ag.no_hp or "") if ag else ""
+    digits = "".join(ch for ch in hp if ch.isdigit())
+    if digits.startswith("0"):
+        digits = "62" + digits[1:]
+    wa_url = ("https://wa.me/" + digits + "?text=" if digits else "https://wa.me/?text=") + quote(text)
+    return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl, "wa_url": wa_url})
+
+
+
+def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "Struk tidak ditemukan")
+    raw = json.loads(t.items)
+    for it in raw:
+        if not it.get("harga"):
+            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            it["harga"] = pr.harga if pr else 0
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
+    return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
+
+
+def _rpx(x):
+    try:
+        x = float(x)
+    except Exception:
+        x = 0.0
+    return "Rp" + format(int(round(x)), ",").replace(",", ".")
+templates.env.filters["rpx"] = _rpx
+
 
 
 def rp0(x):
@@ -2319,6 +2379,8 @@ def buat_teks_struk(db, t):
     L.append("TOTAL  : " + rp0(t.total or 0))
     if t.total_diskon:
         L.append("Diskon : " + rp0(t.total_diskon))
+    if t.poin_dipakai:
+        L.append("POIN   : " + rp0(t.poin_dipakai))
     L.append("Bayar  : " + rp0(t.bayar or 0))
     L.append("Kembali: " + rp0(t.kembalian or 0))
     L.append("Metode : " + (t.metode or "TUNAI"))
@@ -2334,45 +2396,3 @@ def buat_teks_struk(db, t):
     L.append("Terima kasih")
     L.append("Parfum Anda, cerita Anda.")
     return "\n".join(L)
-
-@app.get("/struk/{trx_id}/wa")
-def struk_wa(trx_id: int, db: Session = Depends(get_db)):
-    t = db.get(models.Transaksi, trx_id)
-    if not t:
-        raise HTTPException(404, "tidak ditemukan")
-    text = buat_teks_struk(db, t)
-    hp = ""
-    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
-    if pl:
-        ag = db.get(models.Anggota, pl.anggota_id)
-        if ag:
-            hp = ag.no_hp or ""
-    digits = "".join(ch for ch in hp if ch.isdigit())
-    if digits.startswith("0"):
-        digits = "62" + digits[1:]
-    url = ("https://wa.me/" + digits + "?text=" if digits else "https://wa.me/?text=")
-    return {"text": text, "url": url}
-
-
-@app.get("/struk/{trx_id}")
-def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
-    t = db.get(models.Transaksi, trx_id)
-    if not t:
-        raise HTTPException(404, "Struk tidak ditemukan")
-    raw = json.loads(t.items)
-    for it in raw:
-        if not it.get("harga"):
-            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
-            it["harga"] = pr.harga if pr else 0
-    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
-    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
-    return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
-
-
-def _rpx(x):
-    try:
-        x = float(x)
-    except Exception:
-        x = 0.0
-    return "Rp" + format(int(round(x)), ",").replace(",", ".")
-templates.env.filters["rpx"] = _rpx
