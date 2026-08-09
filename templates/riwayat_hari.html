@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Riwayat{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h2>Riwayat Transaksi</h2>
+  <span class="badge">Hari ini {{ today.strftime("%d/%m/%Y") }} • reset otomatis jam 00:00</span>
+</div>
+<div class="card" style="margin:15px 0">
+  <form method="get" action="/transaksi/excel" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="date" name="start_date" id="trx_start" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <span>s/d</span>
+    <input type="date" name="end_date" id="trx_end" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <button type="submit" style="background:#16a34a;color:white;padding:8px 16px;border:0;border-radius:6px">📥 Download Excel (per struk)</button>
+    <button type="button" onclick="setTrxPeriode(30)">30 Hari</button>
+    <button type="button" onclick="setTrxPeriode(7)">7 Hari</button>
+    <button type="button" onclick="setTrxPeriode(0)">Hari Ini</button>
+  </form>
+</div>
+<div class="card" style="margin-bottom:15px">Total penjualan hari ini (tanpa VOID): <strong style="font-size:20px">Rp {{ "%0.0f"|format(total_hari) }}</strong></div>
+<div class="card">
+  <table style="width:100%">
+    <tr><th>ID Transaksi</th><th>Waktu</th><th>Metode</th><th>Items</th><th style="text-align:right">Total</th><th>Status</th><th>Aksi</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.t.kode_trx or ('TRX-' ~ r.t.id) }}</td>
+      <td>{{ r.t.dibuat.strftime("%d/%m/%Y %H:%M") }}</td>
+      <td>{{ r.t.metode or 'TUNAI' }}</td>
+      <td>{{ r.items_str }}</td>
+      <td style="text-align:right">{{ "%0.0f"|format(r.t.total or 0) }}</td>
+      <td>{% if r.t.void %}<span class="badge" style="background:#fee2e2;color:var(--danger)">VOID</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">SAH</span>{% endif %}</td>
+      <td>
+        <a href="/struk/{{ r.t.id }}">Struk</a>
+        {% if not r.t.void %}
+        <form method="post" action="{{ r.void_action }}" style="display:inline" onsubmit="return confirm('Void transaksi ini?')">
+          <button class="btn-danger" type="submit">Void</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">Belum ada transaksi hari ini.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<script>
+function setTrxPeriode(hari){
+const now=new Date();const end=now.toISOString().split('T')[0];let start;
+if(hari===0){start=end;}else{const d=new Date();d.setDate(d.getDate()-hari+1);start=d.toISOString().split('T')[0];}
+document.getElementById('trx_start').value=start;document.getElementById('trx_end').value=end;
+}
+window.addEventListener('load',function(){setTrxPeriode(0);});
+</script>
+{% endblock %}

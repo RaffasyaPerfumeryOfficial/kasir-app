@@ -38,7 +38,17 @@ td { vertical-align: top; padding: 1px 0; }
 <tr><td>Kembali</td><td class="r">{{ '%0.0f'|format(t.kembalian) }}</td></tr>
 </table>
 <div class="line"></div>
+{% if ag %}
+<div class="line"></div>
+<table>
+<tr><td>Anggota</td><td class="r">{{ ag.nama }}</td></tr>
+<tr><td>Poin +</td><td class="r">{{ "%0.0f"|format(pl.poin or 0) }}</td></tr>
+<tr><td>Total poin</td><td class="r">{{ "%0.0f"|format(ag.poin or 0) }}</td></tr>
+</table>
+{% endif %}
 <div class="c">Terima kasih<br>Parfum Anda, cerita Anda.</div>
+<p class="noprint" style="text-align:center"><button style="background:#25D366" onclick="kirimWAStruk()">📱 Kirim via WhatsApp</button></p>
 <p class="noprint" style="text-align:center"><button onclick="window.print()">Cetak Lagi</button> <button onclick="history.back()">Kembali</button></p>
+<script>function kirimWAStruk(){fetch(window.location.pathname.replace('/print','')+'/wa').then(r=>r.json()).then(d=>{window.open(d.url+encodeURIComponent(d.text),'_blank');});}</script>
 </body>
 </html>

@@ -143,3 +143,33 @@ class RiwayatTutup(Base):
     ringkasan = Column(String)
     dibuat = Column(DateTime, default=datetime.now)
 
+
+from sqlalchemy import Date
+
+class RekapManual(Base):
+    __tablename__ = "rekap_manual"
+    id = Column(Integer, primary_key=True)
+    tanggal = Column(Date)
+    omzet = Column(Float, default=0)
+    modal = Column(Float, default=0)
+    keuntungan = Column(Float, default=0)
+    margin = Column(String)
+    trx = Column(Integer, default=0)
+
+
+class Anggota(Base):
+    __tablename__ = "anggota"
+    id = Column(Integer, primary_key=True)
+    nama = Column(String)
+    no_hp = Column(String)
+    nomor_member = Column(String)
+    poin = Column(Float, default=0)
+    dibuat = Column(DateTime, default=datetime.now)
+
+class PoinLog(Base):
+    __tablename__ = "poin_log"
+    id = Column(Integer, primary_key=True)
+    anggota_id = Column(Integer)
+    trx_id = Column(Integer)
+    poin = Column(Float, default=0)
+    dibuat = Column(DateTime, default=datetime.now)

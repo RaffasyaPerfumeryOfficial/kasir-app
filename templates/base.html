@@ -12,17 +12,34 @@
     <h1>{{ nama_toko }}</h1>
     <a href="/ai">Pesan AI</a><a href="/dashboard">Dashboard</a>
     <a href="/kasir">Kasir</a>
-    <a href="/riwayat">Transaksi</a>
+    <a href="/riwayat-hari">Riwayat</a>
     <a href="/manajemen">Produk</a>
-    <a href="/laporan">Laporan</a>
+    <a href="/laporan-lengkap">Laporan</a>
     <a href="/labarugi">Laba Rugi</a>
     <a href="/tutup">Tutup Kasir</a>
-    <a href="/logout">Keluar</a>
+    <a href="/anggota">Anggota</a>
+  <a href="/logout">Keluar</a>
   </div>
   <div class="main">
     {% block content %}{% endblock %}
   </div>
 </div>
+
+<script>
+function rpWalker(){
+function fmt(s){return s.replace(/\d{4,}/g,function(m2){return m2.replace(/\B(?=(\d{3})+(?!\d))/g,'.')})}
+var walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null,false);
+var nodes=[];
+while(walk.nextNode())nodes.push(walk.currentNode);
+nodes.forEach(function(n){
+var tag=n.parentNode?n.parentNode.tagName:'';
+if(tag==='SCRIPT'||tag==='STYLE'||tag==='INPUT'||tag==='OPTION'||tag==='SELECT'||tag==='TEXTAREA')return;
+var t=n.nodeValue;
+if(/\d{4,}/.test(t)&&t.indexOf('.')===-1){n.nodeValue=fmt(t);}
+});
+}
+document.addEventListener('DOMContentLoaded',rpWalker);
+</script>
 </body>
 </html>
 

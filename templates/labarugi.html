@@ -37,7 +37,7 @@
     <h3>Rincian per Hari</h3>
     <div style="overflow-x:auto">
     <table style="width:100%">
-      <tr><th>Tanggal</th><th style="text-align:right">Gross</th><th style="text-align:right">Diskon</th><th style="text-align:right">Pendapatan</th><th style="text-align:right">HPP</th><th style="text-align:right">Operasional</th><th style="text-align:right">Laba</th></tr>
+      <tr><th>Tanggal</th><th style="text-align:right">Gross</th><th style="text-align:right">Diskon</th><th style="text-align:right">Pendapatan</th><th style="text-align:right">HPP</th><th style="text-align:right">Operasional</th><th style="text-align:right">Laba</th><th style="text-align:right">Trx</th></tr>
       {% for d, r in rows %}
       <tr>
         <td>{{ d.strftime("%d/%m/%Y") }}</td>
@@ -47,6 +47,7 @@
         <td style="text-align:right">{{ "%0.0f"|format(r.hpp) }}</td>
         <td style="text-align:right">{{ "%0.0f"|format(r.op) }}</td>
         <td style="text-align:right"><strong>{{ "%0.0f"|format(r.net - r.hpp - r.op) }}</strong></td>
+        <td style="text-align:right">{{ r.trx }}</td>
       </tr>
       {% else %}
       <tr><td colspan="7">Belum ada data di periode ini.</td></tr>

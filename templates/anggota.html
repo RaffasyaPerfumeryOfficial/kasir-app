@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Anggota{% endblock %}
+{% block content %}
+<div class="topbar"><h2>Anggota / Member</h2><span class="badge">{{ anggota_list|length }} anggota</span></div>
+<div class="grid">
+  <div class="card">
+    <div style="max-height:480px;overflow-y:auto">
+      <table style="width:100%">
+        <tr><th>Nama</th><th>No HP</th><th>Nomer Member</th><th style="text-align:right">Poin</th></tr>
+        {% for a in anggota_list %}
+        <tr>
+          <td><strong>{{ a.nama }}</strong></td>
+          <td>{{ a.no_hp }}</td>
+          <td>{{ a.nomor_member }}</td>
+          <td style="text-align:right"><strong>{{ "%0.0f"|format(a.poin or 0) }}</strong></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">Belum ada anggota.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:12px">Tambahkan Anggota</h3>
+    <form method="post" action="/anggota/simpan">
+      <input name="nama" placeholder="Nama" required>
+      <input name="no_hp" placeholder="No HP (misal 0853...)" required>
+      <button style="width:100%">+ Tambah (nomer member otomatis)</button>
+    </form>
+    <p style="color:var(--muted);margin-top:10px;font-size:13px">Poin = 5% dari belanja kategori BIBIT, otomatis saat transaksi dengan memilih anggota di pembayaran.</p>
+  </div>
+</div>
+{% endblock %}

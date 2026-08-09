@@ -81,9 +81,20 @@ def halaman_login(request: Request):
     return templates.TemplateResponse(request, "login.html", {"pesan": ""})
 
 
+LOGIN_FAIL = {}
+
 @app.post("/login/masuk")
 def login_masuk(request: Request, username: str = Form(...), password: str = Form(...)):
+    import time as _time
+    info = LOGIN_FAIL.setdefault(username, {"n": 0, "lock": 0})
+    if info["lock"] and _time.time() < info["lock"]:
+        sisa = int((info["lock"] - _time.time()) // 60) + 1
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"pesan": "Terlalu banyak percobaan. Coba lagi " + str(sisa) + " menit lagi."})
     if USERS.get(username) == password:
+        info["n"] = 0
+        info["lock"] = 0
         sid = secrets.token_hex(16)
         dbx = SessionLocal()
         dbx.add(models.Sesi(token=sid))
@@ -92,9 +103,17 @@ def login_masuk(request: Request, username: str = Form(...), password: str = For
         resp = RedirectResponse("/dashboard", status_code=303)
         resp.set_cookie("session_id", sid, max_age=604800)
         return resp
+    info["n"] += 1
+    if info["n"] >= 5:
+        info["lock"] = _time.time() + 300
+        info["n"] = 0
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"pesan": "5x salah! Login dikunci 5 menit."})
     return templates.TemplateResponse(
-        request, "login.html", {"pesan": "Username atau password salah"}
-    )
+        request, "login.html",
+        {"pesan": "Username atau password salah (percobaan " + str(info["n"]) + "/5)"})
+
 
 
 @app.get("/logout")
@@ -299,17 +318,6 @@ def void_transaksi(trx_id: int, db: Session = Depends(get_db)):
     return RedirectResponse("/riwayat", status_code=303)
 
 
-@app.get("/struk/{trx_id}")
-def struk_transaksi(request: Request, trx_id: int, db: Session = Depends(get_db)):
-    trx = db.get(models.Transaksi, trx_id)
-    if not trx:
-        raise HTTPException(404, "Transaksi tidak ditemukan")
-    return templates.TemplateResponse(
-        request,
-        "struk.html",
-        {"trx": trx, "items": json.loads(trx.items)},
-    )
-
 
 @app.get("/manajemen")
 def manajemen_produk(request: Request, db: Session = Depends(get_db)):
@@ -385,63 +393,73 @@ def daftar_produk(db: Session = Depends(get_db)):
 
 
 @app.post("/transaksi")
-def buat_transaksi(t: TransaksiCreate, db: Session = Depends(get_db)):
-    total_before = 0.0
-    total_modal = 0.0
-    total_diskon = t.diskon_total or 0.0
-    detail = []
-    for it in t.items:
-        produk = db.get(models.Produk, it.produk_id)
-        if not produk:
-            raise HTTPException(404, "Produk tidak ditemukan")
-        if produk.stok < it.jumlah:
-            raise HTTPException(400, "Stok tidak cukup: " + produk.nama)
-        subtotal = produk.harga * it.jumlah
-        total_before += subtotal
-        total_modal += (produk.harga_modal or 0.0) * it.jumlah
-        total_diskon += it.diskon or 0.0
-        detail.append(
-            {"nama": produk.nama, "jumlah": it.jumlah, "subtotal": subtotal, "diskon": it.diskon or 0.0}
-        )
-    total = max(0.0, total_before - total_diskon)
-    for it in t.items:
-        produk = db.get(models.Produk, it.produk_id)
-        produk.stok -= it.jumlah
-    if t.metode == "TUNAI":
-        tunai = t.tunai if t.tunai else t.bayar
-        if tunai < total:
-            raise HTTPException(400, "Uang bayar kurang")
-        p_tunai, p_nontunai = total, 0.0
-        kembalian = tunai - total
+async def buat_transaksi(request: Request, db: Session = Depends(get_db)):
+    import random as _rnd, string as _str
+    d = await request.json()
+    items_in = d.get("items", [])
+    diskon_total = float(d.get("diskon_total") or 0)
+    anggota_id = d.get("anggota_id") or ""
+    rows = []
+    total = 0.0
+    bibit_total = 0.0
+    for it in items_in:
+        pr = db.get(models.Produk, int(it["produk_id"]))
+        if not pr:
+            continue
+        qty = int(it["jumlah"])
+        dsc = float(it.get("diskon") or 0)
+        sub = (pr.harga or 0) * qty - dsc
+        total += sub
+        rows.append({"nama": pr.nama, "jumlah": qty, "harga": pr.harga, "diskon": dsc})
+        if (pr.kategori or "").upper() == "BIBIT":
+            bibit_total += sub
+        pr.stok = (pr.stok or 0) - qty
+    total = max(0, total - diskon_total)
+    metode = d.get("metode", "TUNAI")
+    tunai = float(d.get("tunai") or 0)
+    channel = d.get("channel") or ""
+    if metode == "TUNAI":
+        p_tunai, p_non = total, 0.0
+        bayar = tunai if tunai > 0 else total
+        kembalian = bayar - total
         label = "TUNAI"
-    elif t.metode == "SPLIT":
-        tunai = t.tunai
-        if tunai <= 0 or tunai >= total:
-            raise HTTPException(400, "Isi tunai harus di antara 0 dan total")
-        p_tunai, p_nontunai = tunai, total - tunai
-        kembalian = 0.0
-        label = "SPLIT (" + t.channel + ")"
+    elif metode == "NON":
+        p_tunai, p_non = 0.0, total
+        bayar = total
+        kembalian = 0
+        label = "NON-TUNAI (" + channel + ")"
     else:
-        tunai = total
-        p_tunai, p_nontunai = 0.0, total
-        kembalian = 0.0
-        label = "NON-TUNAI (" + t.channel + ")"
+        p_tunai = min(tunai, total)
+        p_non = total - p_tunai
+        bayar = total
+        kembalian = 0
+        label = "SPLIT (TUNAI+" + channel + ")"
+    now = datetime.now()
+    kode = "RP-MKRS/" + now.strftime("%d%m%y") + "/" + "".join(_rnd.choices(_str.ascii_uppercase + _str.digits, k=5))
     trx = models.Transaksi(
-        kode_trx=buat_kode_trx(),
-        items=json.dumps(detail, ensure_ascii=False),
+        kode_trx=kode,
+        items=json.dumps(rows),
         total=total,
-        total_modal=total_modal,
-        total_diskon=total_diskon,
-        bayar=tunai,
+        total_diskon=diskon_total + sum(float(it.get("diskon") or 0) for it in items_in),
+        bayar=bayar,
         kembalian=kembalian,
         metode=label,
         p_tunai=p_tunai,
-        p_nontunai=p_nontunai,
+        p_nontunai=p_non,
     )
     db.add(trx)
     db.commit()
     db.refresh(trx)
-    return {"id": trx.id, "kode": trx.kode_trx, "total": total, "kembalian": trx.kembalian}
+    poin = 0.0
+    if anggota_id:
+        poin = round(0.05 * bibit_total)
+        ag = db.get(models.Anggota, int(anggota_id))
+        if ag:
+            ag.poin = (ag.poin or 0) + poin
+            db.add(models.PoinLog(anggota_id=ag.id, trx_id=trx.id, poin=poin))
+            db.commit()
+    return {"ok": True, "id": trx.id, "kembalian": kembalian, "poin": poin}
+
 
 
 @app.get("/laporan")
@@ -509,12 +527,12 @@ def hitung_laba(db, start_dt, end_dt):
     trx = [t for t in transaksi_valid(db) if start_dt <= t.dibuat.date() <= end_dt]
     rows = {}
     for t in trx:
-        r = rows.setdefault(t.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0})
+        r = rows.setdefault(t.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0})
+        r["trx"] += 1
         item_disc = 0.0
         hpp_t = 0.0
         for it in json.loads(t.items):
             qty = it["jumlah"]
-            harga = it.get("harga") or 0
             item_disc += it.get("diskon") or 0
             p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
             if p:
@@ -527,13 +545,22 @@ def hitung_laba(db, start_dt, end_dt):
         r["hpp"] += hpp_t
     for pg in db.query(models.Pengeluaran).all():
         if start_dt <= pg.dibuat.date() <= end_dt:
-            r = rows.setdefault(pg.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0})
+            r = rows.setdefault(pg.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0})
             r["op"] += pg.jumlah or 0
-    tot = {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0}
+    for mm in db.query(models.RekapManual).all():
+        if start_dt <= mm.tanggal <= end_dt:
+            r = rows.setdefault(mm.tanggal, {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0})
+            r["gross"] += mm.omzet or 0
+            r["net"] += mm.omzet or 0
+            r["hpp"] += mm.modal or 0
+            r["op"] += (mm.omzet or 0) - (mm.modal or 0) - (mm.keuntungan or 0)
+            r["trx"] += mm.trx or 0
+    tot = {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0}
     for r in rows.values():
         for k in tot:
             tot[k] += r[k]
     return {"tot": tot, "rows": sorted(rows.items(), reverse=True)}
+
 
 
 @app.get("/labarugi")
@@ -1631,62 +1658,13 @@ def struk_print(trx_id: int, request: Request, db: Session = Depends(get_db)):
     raw = json.loads(t.items)
     for it in raw:
         if not it.get("harga"):
-            p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
-            it["harga"] = p.harga if p else 0
-    return templates.TemplateResponse(request, "struk_print.html", {"t": t, "items": raw})
+            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            it["harga"] = pr.harga if pr else 0
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
+    return templates.TemplateResponse(request, "struk_print.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
 
-def buat_ringkasan(db):
-    from datetime import date as _d, timedelta as _td
-    today = _d.today()
-    trx = [t for t in transaksi_valid(db) if t.dibuat.date() == today]
-    omzet = sum(t.total or 0 for t in trx)
-    tunai = sum(t.p_tunai or 0 for t in trx)
-    nontunai = sum(t.p_nontunai or 0 for t in trx)
-    satuan = {"BIBIT": "ML", "BOTOL": "PCS", "CAMPURAN": "ML", "AKSESORIS": "ML"}
-    kat = {}
-    for t in trx:
-        for it in json.loads(t.items):
-            p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
-            k = ((p.kategori or "LAIN").upper()) if p else "LAIN"
-            harga_it = it.get("harga") or (p.harga if p else 0) or 0
-            a = kat.setdefault(k, {"rp": 0.0, "qty": 0})
-            a["rp"] += harga_it * it["jumlah"] - (it.get("diskon") or 0)
-            a["qty"] += it["jumlah"]
-    peng_list = []
-    total_peng = 0.0
-    for pg in db.query(models.Pengeluaran).all():
-        if pg.dibuat.date() == today:
-            ket = pg.keterangan if hasattr(pg, "keterangan") else pg.nama
-            peng_list.append((ket or "PENGELUARAN", pg.jumlah or 0))
-            total_peng += pg.jumlah or 0
-    def rp(x):
-        return "Rp " + format(int(round(x)), ",").replace(",", ".")
-    now = datetime.now().strftime("%d/%m/%Y %H:%M")
-    L = []
-    L.append("MEKAR SARI")
-    L.append("Refill Perfumery")
-    L.append("-----------------------------------------")
-    L.append("Tanggal : " + now)
-    L.append("-----------------------------------------")
-    for k in ["BIBIT", "BOTOL", "CAMPURAN", "AKSESORIS"] + sorted([x for x in kat if x not in ("BIBIT", "BOTOL", "CAMPURAN", "AKSESORIS")]):
-        a = kat.get(k)
-        if not a or a["rp"] <= 0:
-            continue
-        L.append("- " + k + " : " + rp(a["rp"]) + " / " + str(a["qty"]) + " " + satuan.get(k, "PCS"))
-    L.append("-----------------------------------------")
-    L.append("PENGELUARAN")
-    if peng_list:
-        for ket, j in peng_list:
-            L.append("- " + str(ket) + " " + rp(j))
-    else:
-        L.append("- Tidak ada pengeluaran")
-    L.append("-----------------------------------------")
-    L.append("METODE PEMBAYARAN")
-    L.append("- TUNAI : " + rp(tunai))
-    L.append("- NON-TUNAI : " + rp(nontunai))
-    L.append("-----------------------------------------")
-    L.append("- TOTAL OMZET : " + rp(omzet))
-    return {"text": "\n".join(L), "omzet": omzet, "tunai": tunai, "nontunai": nontunai, "pengeluaran": total_peng}
+
 
 @app.get("/laporan/laba_rugi/excel")
 def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
@@ -1723,7 +1701,7 @@ def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Sessi
     ws["A6"].font = Font(bold=True, size=14)
     ws.merge_cells("A6:H6")
     ws["A6"].alignment = Alignment(horizontal="center")
-    heads = ["No", "Tanggal", "Gross Sales", "Diskon", "Pendapatan", "Beban HPP", "Beban Operasional", "Laba Bersih"]
+    heads = ["No", "Tanggal", "Gross Sales", "Diskon", "Pendapatan", "Beban HPP", "Beban Operasional", "Laba Bersih", "Trx"]
     for col, h in enumerate(heads, 1):
         c = ws.cell(row=8, column=col, value=h)
         c.font = bold
@@ -1738,6 +1716,7 @@ def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Sessi
         ws.cell(row=row, column=6, value=r["hpp"])
         ws.cell(row=row, column=7, value=r["op"])
         ws.cell(row=row, column=8, value=r["net"] - r["hpp"] - r["op"])
+        ws.cell(row=row, column=9, value=r["trx"])
         row += 1
     row += 1
     ws.cell(row=row, column=2, value="TOTAL").font = bold
@@ -1747,7 +1726,8 @@ def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Sessi
     ws.cell(row=row, column=6, value=tot["hpp"]).font = bold
     ws.cell(row=row, column=7, value=tot["op"]).font = bold
     ws.cell(row=row, column=8, value=tot["net"] - tot["hpp"] - tot["op"]).font = bold
-    for col, w in zip("ABCDEFGH", [6, 14, 14, 12, 14, 14, 18, 14]):
+    ws.cell(row=row, column=9, value=tot["trx"]).font = bold
+    for col, w in zip("ABCDEFGHI", [6, 14, 14, 12, 14, 14, 18, 14, 6]):
         ws.column_dimensions[col].width = w
     for r in ws.iter_rows(min_row=9, max_row=row, min_col=3, max_col=8):
         for c in r:
@@ -2177,3 +2157,201 @@ def download_laba_rugi_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@app.get("/riwayat-hari")
+def riwayat_hari(request: Request, db: Session = Depends(get_db)):
+    today = date.today()
+    trx = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all() if t.dibuat.date() == today]
+    total_hari = sum(t.total or 0 for t in trx if not t.void)
+    rows = []
+    for t in trx:
+        rows.append({
+            "t": t,
+            "items_str": "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items)),
+            "void_action": "/transaksi/void/{trx_id}".replace("{trx_id}", str(t.id)).replace("{id}", str(t.id)),
+        })
+    return templates.TemplateResponse(request, "riwayat_hari.html", {"rows": rows, "total_hari": total_hari, "today": today})
+
+
+@app.get("/laporan-lengkap")
+def laporan_lengkap(request: Request, start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from datetime import datetime
+    if not start_date or not end_date:
+        end_dt = date.today()
+        start_dt = end_dt.replace(day=1)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    per = {}
+    for t in transaksi_valid(db):
+        d = t.dibuat.date()
+        if start_dt <= d <= end_dt:
+            r = per.setdefault(d, {"trx": 0, "omzet": 0.0})
+            r["trx"] += 1
+            r["omzet"] += t.total or 0
+    for m in db.query(models.RekapManual).all():
+        if start_dt <= m.tanggal <= end_dt:
+            r = per.setdefault(m.tanggal, {"trx": 0, "omzet": 0.0})
+            r["trx"] += m.trx or 0
+            r["omzet"] += m.omzet or 0
+    rows = sorted(per.items(), reverse=True)
+    total = sum(r["omzet"] for _, r in rows)
+    return templates.TemplateResponse(request, "laporan_lengkap.html", {
+        "rows": rows, "total": total,
+        "start_date": start_dt.isoformat(), "end_date": end_dt.isoformat()})
+
+
+@app.get("/laporan-lengkap/excel")
+def laporan_lengkap_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from io import BytesIO
+    from datetime import datetime
+    from fastapi.responses import StreamingResponse
+    if not start_date or not end_date:
+        end_dt = date.today()
+        start_dt = end_dt.replace(day=1)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    per = {}
+    for t in transaksi_valid(db):
+        d = t.dibuat.date()
+        if start_dt <= d <= end_dt:
+            r = per.setdefault(d, {"trx": 0, "omzet": 0.0})
+            r["trx"] += 1
+            r["omzet"] += t.total or 0
+    for m in db.query(models.RekapManual).all():
+        if start_dt <= m.tanggal <= end_dt:
+            r = per.setdefault(m.tanggal, {"trx": 0, "omzet": 0.0})
+            r["trx"] += m.trx or 0
+            r["omzet"] += m.omzet or 0
+    rows = sorted(per.items())
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Laporan Penjualan"
+    ws["A1"] = "SALES COUNTER"; ws["B1"] = "RIVALDI RAMDANI"
+    ws["A2"] = "NO HP"; ws["B2"] = "0853-2034-2037"
+    ws["A3"] = "CAB"; ws["B3"] = "MEKAR SARI"
+    ws["A4"] = "PERIODE"
+    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
+    bold = Font(bold=True)
+    for r in range(1, 5):
+        ws.cell(row=r, column=1).font = bold
+    ws["A6"] = "LAPORAN PENJUALAN"
+    ws["A6"].font = Font(bold=True, size=14)
+    for col, h in enumerate(["No", "Tanggal", "Jumlah Transaksi", "Omzet (Rp)"], 1):
+        c = ws.cell(row=8, column=col, value=h)
+        c.font = bold
+    row = 9
+    for i, (d, r) in enumerate(rows, 1):
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(row=row, column=2, value=d.strftime("%d/%m/%Y"))
+        ws.cell(row=row, column=3, value=r["trx"])
+        ws.cell(row=row, column=4, value=r["omzet"])
+        row += 1
+    row += 1
+    ws.cell(row=row, column=3, value="TOTAL").font = bold
+    ws.cell(row=row, column=4, value=sum(r["omzet"] for _, r in rows)).font = bold
+    for col, w in zip("ABCD", [6, 14, 18, 16]):
+        ws.column_dimensions[col].width = w
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    fn = "LaporanPenjualan_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+
+
+def _rp_filter(v):
+    try:
+        return format(int(round(float(v))), ",").replace(",", ".")
+    except Exception:
+        return "0"
+templates.env.filters["rp"] = _rp_filter
+
+
+@app.get("/anggota")
+def anggota_page(request: Request, db: Session = Depends(get_db)):
+    list_a = db.query(models.Anggota).order_by(models.Anggota.id.desc()).all()
+    return templates.TemplateResponse(request, "anggota.html", {"anggota_list": list_a})
+
+@app.post("/anggota/simpan")
+def anggota_simpan(nama: str = Form(...), no_hp: str = Form(...), db: Session = Depends(get_db)):
+    import random as _rnd, string as _str
+    nom = "MS-" + "".join(_rnd.choices(_str.ascii_uppercase + _str.digits, k=6))
+    db.add(models.Anggota(nama=nama.strip(), no_hp=no_hp.strip(), nomor_member=nom, poin=0))
+    db.commit()
+    return RedirectResponse("/anggota", status_code=303)
+
+@app.get("/anggota/list")
+def anggota_list(db: Session = Depends(get_db)):
+    return [{"id": a.id, "label": a.nama + " | " + a.nomor_member} for a in db.query(models.Anggota).all()]
+
+
+def rp0(x):
+    return "Rp " + format(int(round(x)), ",").replace(",", ".")
+
+def buat_teks_struk(db, t):
+    L = []
+    L.append("MEKAR SARI")
+    L.append("Refill Perfumery")
+    L.append("-----------------------------------------")
+    L.append("No   : " + (t.kode_trx or ("TRX-" + str(t.id))))
+    L.append("Waktu: " + t.dibuat.strftime("%d/%m/%Y %H:%M"))
+    L.append("-----------------------------------------")
+    for it in json.loads(t.items):
+        L.append(it["nama"])
+        L.append("  " + str(it["jumlah"]) + " x " + format(int(it.get("harga") or 0), ",").replace(",", ".") + " = " + format(int((it.get("harga") or 0) * it["jumlah"]), ",").replace(",", "."))
+    L.append("-----------------------------------------")
+    L.append("TOTAL  : " + rp0(t.total or 0))
+    if t.total_diskon:
+        L.append("Diskon : " + rp0(t.total_diskon))
+    L.append("Bayar  : " + rp0(t.bayar or 0))
+    L.append("Kembali: " + rp0(t.kembalian or 0))
+    L.append("Metode : " + (t.metode or "TUNAI"))
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    if pl:
+        ag = db.get(models.Anggota, pl.anggota_id)
+        if ag:
+            L.append("-----------------------------------------")
+            L.append("Anggota: " + ag.nama + " (" + ag.nomor_member + ")")
+            L.append("Poin tambah: +" + format(int(pl.poin), ",").replace(",", "."))
+            L.append("Poin total : " + format(int(ag.poin or 0), ",").replace(",", "."))
+    L.append("-----------------------------------------")
+    L.append("Terima kasih")
+    L.append("Parfum Anda, cerita Anda.")
+    return "\n".join(L)
+
+@app.get("/struk/{trx_id}/wa")
+def struk_wa(trx_id: int, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "tidak ditemukan")
+    text = buat_teks_struk(db, t)
+    hp = ""
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    if pl:
+        ag = db.get(models.Anggota, pl.anggota_id)
+        if ag:
+            hp = ag.no_hp or ""
+    digits = "".join(ch for ch in hp if ch.isdigit())
+    if digits.startswith("0"):
+        digits = "62" + digits[1:]
+    url = ("https://wa.me/" + digits + "?text=" if digits else "https://wa.me/?text=")
+    return {"text": text, "url": url}
+
+
+@app.get("/struk/{trx_id}")
+def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+    if not t:
+        raise HTTPException(404, "Struk tidak ditemukan")
+    raw = json.loads(t.items)
+    for it in raw:
+        if not it.get("harga"):
+            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
+            it["harga"] = pr.harga if pr else 0
+    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
+    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
+    return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
