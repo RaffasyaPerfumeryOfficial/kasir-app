@@ -30,31 +30,26 @@
   <div class="card"><h3 style="color:var(--muted);font-size:13px">PENDAPATAN</h3><p style="font-size:22px;font-weight:800">Rp {{ "%0.0f"|format(tot.net) }}</p></div>
   <div class="card"><h3 style="color:var(--muted);font-size:13px">BEBAN HPP</h3><p style="font-size:22px;font-weight:800;color:#d97706">Rp {{ "%0.0f"|format(tot.hpp) }}</p></div>
   <div class="card"><h3 style="color:var(--muted);font-size:13px">BEBAN OPERASIONAL</h3><p style="font-size:22px;font-weight:800;color:#d97706">Rp {{ "%0.0f"|format(tot.op) }}</p></div>
-  <div class="card" style="border-left:4px solid var(--success)"><h3 style="color:var(--muted);font-size:13px">LABA BERSIH</h3><p style="font-size:22px;font-weight:800;color:var(--success)">Rp {{ "%0.0f"|format(tot.net - tot.hpp - tot.op) }}</p></div>
+  <div class="card"><h3 style="color:var(--muted);font-size:13px">PEMASUKAN</h3><p style="font-size:22px;font-weight:800;color:var(--success)">Rp {{ "%0.0f"|format(tot.pmsk) }}</p></div>
+  <div class="card" style="border-left:4px solid var(--success)"><h3 style="color:var(--muted);font-size:13px">LABA BERSIH</h3><p style="font-size:22px;font-weight:800;color:var(--success)">Rp {{ "%0.0f"|format(tot.net - tot.hpp - tot.op + tot.pmsk) }}</p></div>
 </div>
 <div class="grid">
-  <div class="card">
-    <h3>Catat Beban Operasional</h3>
-    <form method="post" action="/labarugi/pengeluaran" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-      <input name="keterangan" placeholder="Keterangan (misal: beli botol, listrik)" required>
-      <input name="jumlah" type="number" placeholder="Jumlah (Rp)" required>
-      <button class="btn-danger" type="submit">Catat Pengeluaran</button>
-    </form>
-  </div>
+
   <div class="card">
     <h3>Rincian per Hari</h3>
     <div style="overflow-x:auto">
     <table style="width:100%">
-      <tr><th>Tanggal</th><th style="text-align:right">Gross</th><th style="text-align:right">Diskon</th><th style="text-align:right">Pendapatan</th><th style="text-align:right">HPP</th><th style="text-align:right">Operasional</th><th style="text-align:right">Laba</th><th style="text-align:right">Trx</th></tr>
+      <tr><th>Tanggal</th><th style="text-align:right">Gross</th><th style="text-align:right">Diskon</th><th style="text-align:right">Pendapatan</th><th style="text-align:right">Pemasukan</th><th style="text-align:right">HPP</th><th style="text-align:right">Operasional</th><th style="text-align:right">Laba</th><th style="text-align:right">Trx</th></tr>
       {% for d, r in rows %}
       <tr>
         <td>{{ d.strftime("%d/%m/%Y") }}</td>
         <td style="text-align:right">{{ "%0.0f"|format(r.gross) }}</td>
         <td style="text-align:right">{{ "%0.0f"|format(r.disc) }}</td>
         <td style="text-align:right">{{ "%0.0f"|format(r.net) }}</td>
+        <td style="text-align:right;color:var(--success)">{{ "%0.0f"|format(r.pmsk) }}</td>
         <td style="text-align:right">{{ "%0.0f"|format(r.hpp) }}</td>
         <td style="text-align:right">{{ "%0.0f"|format(r.op) }}</td>
-        <td style="text-align:right"><strong>{{ "%0.0f"|format(r.net - r.hpp - r.op) }}</strong></td>
+        <td style="text-align:right"><strong>{{ "%0.0f"|format(r.net - r.hpp - r.op + r.pmsk) }}</strong></td>
         <td style="text-align:right">{{ r.trx }}</td>
       </tr>
       {% else %}

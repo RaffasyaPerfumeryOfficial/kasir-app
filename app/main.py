@@ -520,7 +520,7 @@ def hitung_laba(db, start_dt, end_dt):
     trx = [t for t in transaksi_valid(db) if start_dt <= t.dibuat.date() <= end_dt]
     rows = {}
     for t in trx:
-        r = rows.setdefault(t.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0})
+        r = rows.setdefault(t.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "pmsk": 0.0, "trx": 0})
         r["trx"] += 1
         item_disc = 0.0
         hpp_t = 0.0
@@ -538,17 +538,21 @@ def hitung_laba(db, start_dt, end_dt):
         r["hpp"] += hpp_t
     for pg in db.query(models.Pengeluaran).all():
         if start_dt <= pg.dibuat.date() <= end_dt:
-            r = rows.setdefault(pg.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0})
+            r = rows.setdefault(pg.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "pmsk": 0.0, "trx": 0})
             r["op"] += pg.jumlah or 0
+    for pm in db.query(models.Pemasukan).all():
+        if start_dt <= pm.dibuat.date() <= end_dt:
+            r = rows.setdefault(pm.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "pmsk": 0.0, "trx": 0})
+            r["pmsk"] += pm.jumlah or 0
     for mm in db.query(models.RekapManual).all():
         if start_dt <= mm.tanggal <= end_dt:
-            r = rows.setdefault(mm.tanggal, {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0})
+            r = rows.setdefault(mm.tanggal, {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "pmsk": 0.0, "trx": 0})
             r["gross"] += mm.omzet or 0
             r["net"] += mm.omzet or 0
             r["hpp"] += mm.modal or 0
             r["op"] += (mm.omzet or 0) - (mm.modal or 0) - (mm.keuntungan or 0)
             r["trx"] += mm.trx or 0
-    tot = {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "trx": 0}
+    tot = {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "pmsk": 0.0, "trx": 0}
     for r in rows.values():
         for k in tot:
             tot[k] += r[k]
@@ -574,20 +578,6 @@ def labarugi_page(request: Request, start_date: str = "", end_date: str = "", db
     })
 
 
-@app.post("/labarugi/pengeluaran")
-def labarugi_pengeluaran(keterangan: str = Form(...), jumlah: float = Form(...), db: Session = Depends(get_db)):
-    peng = models.Pengeluaran()
-    if hasattr(peng, "keterangan"):
-        peng.keterangan = keterangan
-    elif hasattr(peng, "nama"):
-        peng.nama = keterangan
-    peng.jumlah = jumlah
-    db.add(peng)
-    db.commit()
-    return RedirectResponse("/labarugi", status_code=303)
-
-
-
 @app.post("/pengeluaran")
 def tambah_pengeluaran(
     keterangan: str = Form(...),
@@ -597,6 +587,13 @@ def tambah_pengeluaran(
     db.add(models.Pengeluaran(keterangan=keterangan, jumlah=jumlah))
     db.commit()
     return RedirectResponse("/labarugi", status_code=303)
+
+
+@app.post("/pemasukan")
+def tambah_pemasukan(keterangan: str = Form(...), jumlah: float = Form(...), db: Session = Depends(get_db)):
+    db.add(models.Pemasukan(keterangan=keterangan, jumlah=jumlah))
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/tutup")
@@ -1749,8 +1746,8 @@ def buat_ringkasan(db):
     today = _date.today()
     trx = [t for t in transaksi_valid(db) if t.dibuat.date() == today]
     omzet = sum(t.total or 0 for t in trx)
-    tunai = sum(t.p_tunai or 0 for t in trx)
-    nontunai = sum(t.p_nontunai or 0 for t in trx)
+    tunai = sum(split_tunai_non(t)[0] for t in trx)
+    nontunai = sum(split_tunai_non(t)[1] for t in trx)
     satuan = {"BIBIT": "ML", "BOTOL": "PCS", "CAMPURAN": "ML", "AKSESORIS": "ML"}
     kat = {}
     for t in trx:
@@ -1911,7 +1908,6 @@ def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Sessi
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
     data = hitung_laba(db, start_dt, end_dt)
     tot = data["tot"]
-    peng_detail = [pg for pg in db.query(models.Pengeluaran).all() if start_dt <= pg.dibuat.date() <= end_dt]
     wb = Workbook()
     ws = wb.active
     ws.title = "Laba Rugi"
@@ -1928,9 +1924,9 @@ def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Sessi
         ws.cell(row=r, column=1).font = bold
     ws["A6"] = "LAPORAN LABA RUGI"
     ws["A6"].font = Font(bold=True, size=14)
-    ws.merge_cells("A6:H6")
+    ws.merge_cells("A6:J6")
     ws["A6"].alignment = Alignment(horizontal="center")
-    heads = ["No", "Tanggal", "Gross Sales", "Diskon", "Pendapatan", "Beban HPP", "Beban Operasional", "Laba Bersih", "Trx"]
+    heads = ["No", "Tanggal", "Gross Sales", "Diskon", "Pendapatan", "Pemasukan", "Beban HPP", "Beban Operasional", "Laba Bersih", "Trx"]
     for col, h in enumerate(heads, 1):
         c = ws.cell(row=8, column=col, value=h)
         c.font = bold
@@ -1942,46 +1938,27 @@ def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Sessi
         ws.cell(row=row, column=3, value=r["gross"])
         ws.cell(row=row, column=4, value=r["disc"])
         ws.cell(row=row, column=5, value=r["net"])
-        ws.cell(row=row, column=6, value=r["hpp"])
-        ws.cell(row=row, column=7, value=r["op"])
-        ws.cell(row=row, column=8, value=r["net"] - r["hpp"] - r["op"])
-        ws.cell(row=row, column=9, value=r["trx"])
+        ws.cell(row=row, column=6, value=r["pmsk"])
+        ws.cell(row=row, column=7, value=r["hpp"])
+        ws.cell(row=row, column=8, value=r["op"])
+        ws.cell(row=row, column=9, value=r["net"] - r["hpp"] - r["op"] + r["pmsk"])
+        ws.cell(row=row, column=10, value=r["trx"])
         row += 1
     row += 1
     ws.cell(row=row, column=2, value="TOTAL").font = bold
     ws.cell(row=row, column=3, value=tot["gross"]).font = bold
     ws.cell(row=row, column=4, value=tot["disc"]).font = bold
     ws.cell(row=row, column=5, value=tot["net"]).font = bold
-    ws.cell(row=row, column=6, value=tot["hpp"]).font = bold
-    ws.cell(row=row, column=7, value=tot["op"]).font = bold
-    ws.cell(row=row, column=8, value=tot["net"] - tot["hpp"] - tot["op"]).font = bold
-    ws.cell(row=row, column=9, value=tot["trx"]).font = bold
-    for col, w in zip("ABCDEFGHI", [6, 14, 14, 12, 14, 14, 18, 14, 6]):
-        ws.column_dimensions[col].width = w
-    for r in ws.iter_rows(min_row=9, max_row=row, min_col=3, max_col=8):
-        for c in r:
-            if isinstance(c.value, (int, float)):
-                c.number_format = "#,##0"
-    row += 2
-    ws.cell(row=row, column=1, value="RINCIAN BEBAN OPERASIONAL").font = bold
-    row += 1
-    for col, h in enumerate(["No", "Tanggal", "Beban Operasional (Rp)", "Keterangan"], 1):
-        c = ws.cell(row=row, column=col, value=h)
-        c.font = bold
-    row += 1
-    for i, pg in enumerate(sorted(peng_detail, key=lambda x: x.dibuat), 1):
-        ket = pg.keterangan if hasattr(pg, "keterangan") else pg.nama
-        ws.cell(row=row, column=1, value=i)
-        ws.cell(row=row, column=2, value=pg.dibuat.strftime("%d/%m/%Y %H:%M"))
-        ws.cell(row=row, column=3, value=pg.jumlah or 0)
-        ws.cell(row=row, column=4, value=ket or "")
-        row += 1
-    ws.column_dimensions["D"].width = 40
+    ws.cell(row=row, column=6, value=tot["pmsk"]).font = bold
+    ws.cell(row=row, column=7, value=tot["hpp"]).font = bold
+    ws.cell(row=row, column=8, value=tot["op"]).font = bold
+    ws.cell(row=row, column=9, value=tot["net"] - tot["hpp"] - tot["op"] + tot["pmsk"]).font = bold
+    ws.cell(row=row, column=10, value=tot["trx"]).font = bold
     out = BytesIO()
     wb.save(out)
     out.seek(0)
-    fn = "LabaRugi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
-    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+    filename = "LabaRugi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + filename})
 
 
 

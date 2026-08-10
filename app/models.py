@@ -174,3 +174,12 @@ class PoinLog(Base):
     trx_id = Column(Integer)
     poin = Column(Float, default=0)
     dibuat = Column(DateTime, default=datetime.now)
+
+
+class Pemasukan(Base):
+    __tablename__ = "pemasukan"
+
+    id = Column(Integer, primary_key=True, index=True)
+    keterangan = Column(String)
+    jumlah = Column(Float, default=0.0)
+    dibuat = Column(DateTime, default=datetime.now)
