@@ -1,0 +1,114 @@
+﻿import io, re
+
+# 1) route: terima parameter tanggal (maksimal hari ini)
+m = io.open("app/main.py", encoding="utf-8").read()
+pat = re.compile(r'@app\.get\("/riwayat-hari"\)[\s\S]*?(?=\n@app\.)')
+assert pat.search(m), "route riwayat tidak ketemu"
+new = '''@app.get("/riwayat-hari")
+def riwayat_hari(request: Request, tanggal: str = "", db: Session = Depends(get_db)):
+    from datetime import datetime, timedelta
+    today = date.today()
+    if tanggal:
+        try:
+            d = datetime.strptime(tanggal, "%Y-%m-%d").date()
+        except Exception:
+            d = today
+    else:
+        d = today
+    if d > today:
+        d = today
+    trx = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all() if t.dibuat.date() == d]
+    total_hari = sum(t.total or 0 for t in trx if not t.void)
+    rows = []
+    for t in trx:
+        rows.append({
+            "t": t,
+            "items_str": "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items)),
+            "void_action": "/transaksi/void/" + str(t.id),
+        })
+    return templates.TemplateResponse(request, "riwayat_hari.html", {
+        "rows": rows, "total_hari": total_hari, "today": today, "d": d,
+        "prev_date": (d - timedelta(days=1)).isoformat(),
+        "next_date": (d + timedelta(days=1)).isoformat(),
+        "is_today": d == today})
+
+
+'''
+m = pat.sub(lambda x: new, m, count=1)
+io.open("app/main.py", "w", encoding="utf-8").write(m)
+print("route navigator ok")
+
+# 2) template: navigator < tanggal > + excel kostum
+T = '''{% extends "base.html" %}
+{% block title %}Riwayat{% endblock %}
+{% block content %}
+<div class="topbar">
+  <h2>Riwayat Transaksi</h2>
+  <span class="badge">Hari ini {{ today.strftime("%d/%m/%Y") }} • reset otomatis jam 00:00</span>
+</div>
+
+<div class="card" style="margin:15px 0;text-align:center">
+  <div style="display:flex;align-items:center;justify-content:center;gap:14px">
+    <a href="/riwayat-hari?tanggal={{ prev_date }}" style="font-size:20px;font-weight:800;text-decoration:none;padding:4px 14px;border:1px solid #cbd5e1;border-radius:8px">&lt;</a>
+    <strong style="font-size:18px;min-width:150px">{{ d.strftime("%d/%m/%Y") }}</strong>
+    {% if not is_today %}
+    <a href="/riwayat-hari?tanggal={{ next_date }}" style="font-size:20px;font-weight:800;text-decoration:none;padding:4px 14px;border:1px solid #cbd5e1;border-radius:8px">&gt;</a>
+    {% else %}
+    <span style="font-size:20px;font-weight:800;padding:4px 14px;color:#cbd5e1">&gt;</span>
+    {% endif %}
+  </div>
+  <div style="color:var(--muted);font-size:12px;margin-top:6px">&lt; hari sebelumnya • &gt; hari berikutnya (maksimal hari ini)</div>
+</div>
+
+<div class="card" style="margin-bottom:15px">Total penjualan {{ d.strftime("%d/%m/%Y") }} (tanpa VOID): <strong style="font-size:20px">Rp {{ "%0.0f"|format(total_hari) }}</strong></div>
+
+<div class="card">
+  <table style="width:100%">
+    <tr><th>ID Transaksi</th><th>Waktu</th><th>Metode</th><th>Items</th><th style="text-align:right">Total</th><th>Status</th><th>Aksi</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.t.kode_trx or ('TRX-' ~ r.t.id) }}</td>
+      <td>{{ r.t.dibuat.strftime("%d/%m/%Y %H:%M") }}</td>
+      <td>{{ r.t.metode or 'TUNAI' }}</td>
+      <td>{{ r.items_str }}</td>
+      <td style="text-align:right">{{ "%0.0f"|format(r.t.total or 0) }}</td>
+      <td>{% if r.t.void %}<span class="badge" style="background:#fee2e2;color:var(--danger)">VOID</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">SAH</span>{% endif %}</td>
+      <td>
+        <a href="/struk/{{ r.t.id }}?src=riwayat">Struk</a>
+        {% if not r.t.void %}
+        <form method="post" action="{{ r.void_action }}" style="display:inline" onsubmit="return confirm('Void transaksi ini?')">
+          <button class="btn-danger" type="submit">Void</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">Belum ada transaksi pada tanggal ini.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card" style="margin-top:15px">
+  <h3 style="margin-bottom:10px">📥 Download Excel (Kostum)</h3>
+  <form method="get" action="/transaksi/excel" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="date" name="start_date" id="trx_start" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <span>s/d</span>
+    <input type="date" name="end_date" id="trx_end" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px">
+    <button type="submit" style="background:#16a34a;color:white;padding:8px 16px;border:0;border-radius:6px">Download Excel (per struk)</button>
+    <button type="button" onclick="setTrxPeriode(30)">30 Hari</button>
+    <button type="button" onclick="setTrxPeriode(7)">7 Hari</button>
+    <button type="button" onclick="setTrxPeriode(0)">Hari Ini</button>
+  </form>
+</div>
+<script>
+function setTrxPeriode(hari){
+const now=new Date();const end=now.toISOString().split('T')[0];let start;
+if(hari===0){start=end;}else{const d=new Date();d.setDate(d.getDate()-hari+1);start=d.toISOString().split('T')[0];}
+document.getElementById('trx_start').value=start;document.getElementById('trx_end').value=end;
+}
+window.addEventListener('load',function(){setTrxPeriode(0);});
+</script>
+{% endblock %}
+'''
+io.open("templates/riwayat_hari.html", "w", encoding="utf-8").write(T)
+print("template navigator ok")

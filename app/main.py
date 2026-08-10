@@ -146,11 +146,12 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     tunai_total = 0.0
     nontunai_total = 0.0
     for t in transaksi_list:
-        tunai_total += t.p_tunai or 0.0
-        nontunai_total += t.p_nontunai or 0.0
         if t.dibuat and t.dibuat.date() == today:
             omzet_hari_ini += t.total
             transaksi_hari_ini += 1
+            _t, _n = split_tunai_non(t)
+            tunai_total += _t
+            nontunai_total += _n
     days = []
     if mode == "harian":
         days = [today]
@@ -729,6 +730,31 @@ def hitung_range(d1, d2, transaksi_list, pengeluaran_list):
     return omzet, modal, keluar, laba, margin
 
 
+def hitung_laba_ai(d1, d2, transaksi_list, pengeluaran_list, produk_list):
+    pmap = {}
+    for p in produk_list:
+        pmap[p.nama] = p
+    omzet = 0.0
+    modal = 0.0
+    keluar = 0.0
+    for t in transaksi_list:
+        if t.dibuat and d1 <= t.dibuat.date() <= d2:
+            omzet += t.total or 0
+            if t.total_modal:
+                modal += t.total_modal
+            else:
+                for it in json.loads(t.items):
+                    pr = pmap.get(it["nama"])
+                    if pr:
+                        modal += (pr.harga_modal or 0) * it["jumlah"]
+    for p in pengeluaran_list:
+        if p.dibuat and d1 <= p.dibuat.date() <= d2:
+            keluar += p.jumlah or 0
+    laba = omzet - modal - keluar
+    margin = (laba / omzet * 100) if omzet else 0.0
+    return omzet, modal, keluar, laba, margin
+
+
 def rp(x):
     return "Rp " + format(int(round(x)), ",").replace(",", ".")
 
@@ -862,6 +888,207 @@ def jawab_ai2(q, db, ctx=""):
     for t in transaksi_list:
         for it in json.loads(t.items):
             terjual[it["nama"]] = terjual.get(it["nama"], 0) + it["jumlah"]
+    if "bibit" in ql and ("terjual" in ql or "jual" in ql or "penjualan" in ql or "laku" in ql or "ml" in ql) and ("hari" in ql or "kemarin" in ql or "lusa" in ql or "lalu" in ql or "sekarang" in ql or re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", ql)):
+        off = None
+        if "lusa" in ql:
+            off = 2
+        elif "kemarin" in ql:
+            off = 1
+        elif "hari ini" in ql or "sekarang" in ql:
+            off = 0
+        else:
+            mnum = re.search(r"(\d+)\s*hari\s+(?:yang\s+)?lalu", ql)
+            mdate = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", ql)
+            if mnum:
+                off = int(mnum.group(1))
+            elif mdate:
+                try:
+                    from datetime import datetime as _dt4
+                    dd = _dt4.strptime(mdate.group(0).replace("/", "-"), "%d-%m-%Y").date()
+                    off = (date.today() - dd).days
+                except Exception:
+                    off = None
+        if off is not None and off >= 0:
+            today = date.today()
+            target = today - timedelta(days=off)
+            kat_map = {}
+            for p in produk_list:
+                kat_map[p.nama] = (p.kategori or "").lower()
+            ml = 0
+            omz = 0.0
+            ntrx = 0
+            for t in transaksi_list:
+                if t.dibuat and t.dibuat.date() == target:
+                    hit = 0
+                    for it in json.loads(t.items):
+                        if kat_map.get(it["nama"]) == "bibit":
+                            hit += it["jumlah"]
+                            omz += (it.get("harga") or 0) * it["jumlah"]
+                    if hit:
+                        ntrx += 1
+                    ml += hit
+            label = "hari ini" if off == 0 else ("kemarin" if off == 1 else ("kemarin lusa" if off == 2 else target.strftime("%d/%m/%Y")))
+            return "BIBIT " + label + " (" + target.strftime("%d/%m/%Y") + "):\nTerjual : " + str(ml) + " ml\nOmzet : " + rp(omz) + "\nJumlah transaksi: " + str(ntrx) + "\n\n(Sinkron dengan Riwayat & Laporan)"
+    kat_found = None
+    for kd in sorted(set((p.kategori or "").lower() for p in produk_list if p.kategori), key=len, reverse=True):
+        if kd and kd in ql:
+            kat_found = kd
+            break
+    if kat_found and ("terjual" in ql or "jual" in ql or "penjualan" in ql or "laku" in ql) and ("hari" in ql or "kemarin" in ql or "lusa" in ql or "lalu" in ql or "sekarang" in ql or re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", ql)):
+        off = None
+        if "lusa" in ql:
+            off = 2
+        elif "kemarin" in ql:
+            off = 1
+        elif "hari ini" in ql or "sekarang" in ql:
+            off = 0
+        else:
+            mnum = re.search(r"(\d+)\s*hari\s+(?:yang\s+)?lalu", ql)
+            mdate = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", ql)
+            if mnum:
+                off = int(mnum.group(1))
+            elif mdate:
+                try:
+                    from datetime import datetime as _dt3
+                    dd = _dt3.strptime(mdate.group(0).replace("/", "-"), "%d-%m-%Y").date()
+                    off = (date.today() - dd).days
+                except Exception:
+                    off = None
+        if off is not None and off >= 0:
+            today = date.today()
+            target = today - timedelta(days=off)
+            kat_map = {}
+            for p in produk_list:
+                kat_map[p.nama] = (p.kategori or "").lower()
+            pcs = 0
+            omz = 0.0
+            ntrx = 0
+            for t in transaksi_list:
+                if t.dibuat and t.dibuat.date() == target:
+                    hit = 0
+                    for it in json.loads(t.items):
+                        if kat_map.get(it["nama"]) == kat_found:
+                            hit += it["jumlah"]
+                            omz += (it.get("harga") or 0) * it["jumlah"]
+                    if hit:
+                        ntrx += 1
+                    pcs += hit
+            label = "hari ini" if off == 0 else ("kemarin" if off == 1 else ("kemarin lusa" if off == 2 else target.strftime("%d/%m/%Y")))
+            return "Kategori " + kat_found.upper() + " " + label + " (" + target.strftime("%d/%m/%Y") + "):\nTerjual : " + str(pcs) + " pcs\nOmzet : " + rp(omz) + "\nJumlah transaksi: " + str(ntrx) + "\n\n(Sinkron dengan Riwayat & Laporan)"
+    if "diskon" in ql and ("hari" in ql or "kemarin" in ql or "lusa" in ql or "lalu" in ql or "sekarang" in ql or re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", ql)):
+        off = None
+        if "lusa" in ql:
+            off = 2
+        elif "kemarin" in ql:
+            off = 1
+        elif "hari ini" in ql or "sekarang" in ql:
+            off = 0
+        else:
+            mnum = re.search(r"(\d+)\s*hari\s+(?:yang\s+)?lalu", ql)
+            mdate = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", ql)
+            if mnum:
+                off = int(mnum.group(1))
+            elif mdate:
+                try:
+                    from datetime import datetime as _dt2
+                    dd = _dt2.strptime(mdate.group(0).replace("/", "-"), "%d-%m-%Y").date()
+                    off = (date.today() - dd).days
+                except Exception:
+                    off = None
+        if off is not None and off >= 0:
+            today = date.today()
+            target = today - timedelta(days=off)
+            trx = [t for t in transaksi_list if t.dibuat and t.dibuat.date() == target]
+            tot_d = sum(t.total_diskon or 0 for t in trx)
+            n_d = sum(1 for t in trx if (t.total_diskon or 0) > 0)
+            label = "hari ini" if off == 0 else ("kemarin" if off == 1 else ("kemarin lusa" if off == 2 else target.strftime("%d/%m/%Y")))
+            return "Total diskon " + label + " (" + target.strftime("%d/%m/%Y") + "):\n" + rp(tot_d) + "\nJumlah transaksi pakai diskon: " + str(n_d) + "\n\n(Sinkron dengan Riwayat & Laporan)"
+    kat_stok = None
+    if "stok" in ql or "sisa" in ql:
+        for kd in sorted(set((p.kategori or "").lower() for p in produk_list if p.kategori), key=len, reverse=True):
+            if kd and kd in ql:
+                kat_stok = kd
+                break
+    if kat_stok:
+        off = 0
+        if "lusa" in ql:
+            off = 2
+        elif "kemarin" in ql:
+            off = 1
+        elif "hari ini" in ql or "sekarang" in ql:
+            off = 0
+        else:
+            mnum = re.search(r"(\d+)\s*hari\s+(?:yang\s+)?lalu", ql)
+            mdate = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", ql)
+            if mnum:
+                off = int(mnum.group(1))
+            elif mdate:
+                try:
+                    from datetime import datetime as _dt6
+                    dd = _dt6.strptime(mdate.group(0).replace("/", "-"), "%d-%m-%Y").date()
+                    off = (date.today() - dd).days
+                except Exception:
+                    off = 0
+        if off is not None and off >= 0:
+            today = date.today()
+            target = today - timedelta(days=off)
+            stok_now = sum(p.stok or 0 for p in produk_list if (p.kategori or "").lower() == kat_stok)
+            sold_after = 0
+            if off > 0:
+                kat_map = {}
+                for p in produk_list:
+                    kat_map[p.nama] = (p.kategori or "").lower()
+                for t in transaksi_list:
+                    if t.dibuat and t.dibuat.date() > target:
+                        for it in json.loads(t.items):
+                            if kat_map.get(it["nama"]) == kat_stok:
+                                sold_after += it["jumlah"]
+            stok_then = stok_now + sold_after
+            unit = "ml" if kat_stok == "bibit" else "pcs"
+            label = "hari ini" if off == 0 else ("kemarin" if off == 1 else ("kemarin lusa" if off == 2 else target.strftime("%d/%m/%Y")))
+            return "Sisa stok " + kat_stok.upper() + " " + label + " (" + target.strftime("%d/%m/%Y") + "):\n" + str(stok_then) + " " + unit + "\n\n(Stok sekarang: " + str(stok_now) + " " + unit + " • Terjual setelah tanggal itu: " + str(sold_after) + " " + unit + ")\n(Sinkron dengan Produk & Riwayat)"
+    if ("omzet" in ql or "omset" in ql or "penjualan" in ql) and ("hari" in ql or "kemarin" in ql or "lusa" in ql or "lalu" in ql or "sekarang" in ql or re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", ql)):
+        from datetime import datetime as _dt
+        off = None
+        if "lusa" in ql:
+            off = 2
+        elif "kemarin" in ql:
+            off = 1
+        elif "hari ini" in ql or "sekarang" in ql:
+            off = 0
+        else:
+            mnum = re.search(r"(\d+)\s*hari\s+(?:yang\s+)?lalu", ql)
+            mdate = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", ql)
+            if mnum:
+                off = int(mnum.group(1))
+            elif mdate:
+                try:
+                    dd = _dt.strptime(mdate.group(0).replace("/", "-"), "%d-%m-%Y").date()
+                    off = (date.today() - dd).days
+                except Exception:
+                    off = None
+        if off is not None and off >= 0:
+            today = date.today()
+            target = today - timedelta(days=off)
+            trx = [t for t in transaksi_list if t.dibuat and t.dibuat.date() == target]
+            tot = sum(t.total or 0 for t in trx)
+            tun = sum(split_tunai_non(t)[0] for t in trx)
+            non = sum(split_tunai_non(t)[1] for t in trx)
+            label = "hari ini" if off == 0 else ("kemarin" if off == 1 else ("kemarin lusa" if off == 2 else target.strftime("%d/%m/%Y")))
+            peng_list = [p for p in db.query(models.Pengeluaran).all() if p.dibuat and p.dibuat.date() == target]
+            tot_peng = sum(p.jumlah or 0 for p in peng_list)
+            tunai_bersih = tun - tot_peng
+            out = ("Omzet sinkron " + label + " (" + target.strftime("%d/%m/%Y") + "):\nomzet : " + rp(tot) + "\nTUNAI : " + rp(tun) + "\nNON-TUNAI : " + rp(non))
+            if tot_peng > 0:
+                out += "\nPengeluaran : " + rp(tot_peng) + "\nRINCIAN PENGELUARAN:"
+                for p in peng_list:
+                    out += "\n- " + (p.keterangan or "Pengeluaran").upper() + " " + rp(p.jumlah or 0)
+                out += "\nTUNAI setelah pengeluaran : " + rp(tunai_bersih)
+                out += "\nNON-TUNAI tidak dipotong : " + rp(non)
+            else:
+                out += "\nPengeluaran : tidak ada\nTUNAI setelah pengeluaran : " + rp(tunai_bersih)
+            out += "\n\n(Sinkron dengan Dashboard, Riwayat & Laporan)"
+            return out
     if ql.strip() in ["ya", "iya", "y", "yes", "mau", "boleh", "ok", "oke"] and ctx:
         tgt = None
         for p in produk_list:
@@ -1017,19 +1244,8 @@ def jawab_ai2(q, db, ctx=""):
         return "Laba hari ini:\nOmzet " + rp(omzet) + "\nModal " + rp(modal) + "\nPengeluaran " + rp(keluar) + "\nKeuntungan " + rp(laba)
     if ("laba" in ql or "untung" in ql or "keuntungan" in ql or "margin" in ql) and "bulan" in ql:
         month_start = date.today().replace(day=1)
-        omzet = 0.0
-        modal = 0.0
-        keluar = 0.0
-        for t in transaksi_list:
-            if t.dibuat and t.dibuat.date() >= month_start:
-                omzet += t.total
-                modal += t.total_modal or 0.0
-        for p in pengeluaran_list:
-            if p.dibuat.date() >= month_start:
-                keluar += p.jumlah
-        laba = omzet - modal - keluar
-        margin = (laba / omzet * 100) if omzet else 0.0
-        return "Laba bulan ini:\nOmzet " + rp(omzet) + "\nModal " + rp(modal) + "\nPengeluaran " + rp(keluar) + "\nKeuntungan " + rp(laba) + "\nMargin " + str(int(margin)) + "%"
+        omzet, modal, keluar, laba, margin = hitung_laba_ai(month_start, date.today(), transaksi_list, pengeluaran_list, produk_list)
+        return "Laba bulan ini:\nOmzet " + rp(omzet) + "\nModal (HPP) " + rp(modal) + "\nPengeluaran " + rp(keluar) + "\nKeuntungan " + rp(laba) + "\nMargin " + str(int(margin)) + "%\n\n(Sinkron dengan menu Laba Rugi)"
     if "tidak laku" in ql or "stok banyak" in ql or "dead" in ql:
         dead = [p for p in produk_list if terjual.get(p.nama, 0) == 0 and (p.stok or 0) >= 50 and G.get(p.nama, "") not in ("", "-") and boleh(p.nama, ql)]
         dead.sort(key=lambda p: p.stok or 0, reverse=True)
@@ -1344,6 +1560,18 @@ def harga_terapkan(
             n += 1
     db.commit()
     return {"n": n}
+
+def split_tunai_non(t):
+    tun = t.p_tunai or 0.0
+    non = t.p_nontunai or 0.0
+    if tun == 0 and non == 0:
+        met = (t.metode or "").upper()
+        if ("NON" in met) or ("QRIS" in met) or ("EDC" in met) or ("TRANSFER" in met):
+            non = t.total or 0
+        else:
+            tun = t.total or 0
+    return tun, non
+
 
 def transaksi_valid(db):
     return db.query(models.Transaksi).filter((models.Transaksi.void == None) | (models.Transaksi.void == 0)).all()
@@ -2161,18 +2389,33 @@ def download_laba_rugi_excel(
 
 
 @app.get("/riwayat-hari")
-def riwayat_hari(request: Request, db: Session = Depends(get_db)):
+def riwayat_hari(request: Request, tanggal: str = "", db: Session = Depends(get_db)):
+    from datetime import datetime, timedelta
     today = date.today()
-    trx = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all() if t.dibuat.date() == today]
+    if tanggal:
+        try:
+            d = datetime.strptime(tanggal, "%Y-%m-%d").date()
+        except Exception:
+            d = today
+    else:
+        d = today
+    if d > today:
+        d = today
+    trx = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id.desc()).all() if t.dibuat.date() == d]
     total_hari = sum(t.total or 0 for t in trx if not t.void)
     rows = []
     for t in trx:
         rows.append({
             "t": t,
             "items_str": "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items)),
-            "void_action": "/transaksi/void/{trx_id}".replace("{trx_id}", str(t.id)).replace("{id}", str(t.id)),
+            "void_action": "/transaksi/void/" + str(t.id),
         })
-    return templates.TemplateResponse(request, "riwayat_hari.html", {"rows": rows, "total_hari": total_hari, "today": today})
+    return templates.TemplateResponse(request, "riwayat_hari.html", {
+        "rows": rows, "total_hari": total_hari, "today": today, "d": d,
+        "prev_date": (d - timedelta(days=1)).isoformat(),
+        "next_date": (d + timedelta(days=1)).isoformat(),
+        "is_today": d == today})
+
 
 
 @app.get("/laporan-lengkap")
