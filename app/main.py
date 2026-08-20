@@ -408,12 +408,14 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
         p = db.get(models.Produk, int(it["produk_id"]))
         if not p:
             return JSONResponse({"ok": False, "detail": "Produk tidak ditemukan"}, status_code=400)
-        qty = int(it["jumlah"])
+        qty = float(it["jumlah"])
+        if qty == int(qty): qty = int(qty)
         if getattr(p, "stok", None) is not None and p.stok < qty:
             return JSONResponse({"ok": False, "detail": "Stok kurang: " + p.nama}, status_code=400)
     for it in items_in:
         p = db.get(models.Produk, int(it["produk_id"]))
-        qty = int(it["jumlah"])
+        qty = float(it["jumlah"])
+        if qty == int(qty): qty = int(qty)
         dsc = float(it.get("diskon") or 0)
         sub = (p.harga or 0) * qty - dsc
         total += sub
