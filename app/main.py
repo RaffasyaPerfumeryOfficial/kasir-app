@@ -442,7 +442,7 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
     t.bayar = float(payload.get("tunai") or 0)
     t.kembalian = float(payload.get("kembalian") or 0)
     t.poin_dipakai = poin
-    t.kode_trx = "RP-MKRS/" + datetime.now().strftime("%m%d%y") + "/" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    t.kode_trx = "RP-MKRS/" + datetime.now().strftime("%d-%m-%Y") + "/" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
     db.add(t)
     db.flush()
     if ag:
