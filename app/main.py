@@ -614,12 +614,21 @@ def tutup_preview(db: Session = Depends(get_db)):
 
 
 def backup_otomatis():
-    folder = "backup"
+    sekarang = datetime.now()
 
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    folder = os.path.join(
+        "backup",
+        str(sekarang.year),
+        str(sekarang.month).zfill(2)
+    )
 
-    nama_file = "kasir-" + date.today().isoformat() + ".db"
+    os.makedirs(folder, exist_ok=True)
+
+    nama_file = (
+        "kasir-"
+        + sekarang.strftime("%Y-%m-%d-%H%M")
+        + ".db"
+    )
 
     tujuan = os.path.join(folder, nama_file)
 
@@ -2636,3 +2645,5 @@ def buat_teks_struk(db, t):
     L.append("Terima kasih")
     L.append("Parfum Anda, cerita Anda.")
     return "\n".join(L)
+
+
