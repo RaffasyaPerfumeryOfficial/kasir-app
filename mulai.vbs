@@ -1,3 +1,3 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "F:\Users\rival\kasir-app"
+WshShell.CurrentDirectory = "C:\parfum\kasir-app"
 WshShell.Run "cmd /c jalan.bat", 0, False
