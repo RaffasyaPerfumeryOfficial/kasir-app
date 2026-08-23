@@ -626,13 +626,27 @@ def backup_otomatis():
 
     nama_file = (
         "kasir-"
-        + sekarang.strftime("%Y-%m-%d-%H%M")
+        + sekarang.strftime("%Y-%m-%d-%H%M%S")
         + ".db"
     )
 
     tujuan = os.path.join(folder, nama_file)
 
     shutil.copy2("kasir.db", tujuan)
+
+    ukuran = os.path.getsize(tujuan)
+
+    log = os.path.join("backup", "backup_log.txt")
+
+    with open(log, "a", encoding="utf-8") as f:
+        f.write(
+            f"{sekarang.strftime('%d/%m/%Y %H:%M:%S')}\n"
+            f"STATUS : BERHASIL\n"
+            f"FILE   : {tujuan}\n"
+            f"UKURAN : {ukuran} byte\n"
+            f"{'-'*40}\n"
+        )
+
 
 @app.post("/tutup/simpan")
 async def tutup_simpan(request: Request, db: Session = Depends(get_db)):
