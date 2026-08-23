@@ -625,7 +625,7 @@ def backup_otomatis():
     os.makedirs(folder, exist_ok=True)
 
     nama_file = (
-        "kasir-"
+        "kasir-auto-"
         + sekarang.strftime("%Y-%m-%d-%H%M%S")
         + ".db"
     )
@@ -666,32 +666,91 @@ def tutup_preview(db: Session = Depends(get_db)):
 
 @app.get("/backup")
 def backup_db():
-    return FileResponse(
+    backup_otomatis()
+
+    return RedirectResponse(
+        "/backup-restore",
+        status_code=303
+    )
+
+
+
+@app.post("/backup/create")
+def buat_backup_manual():
+
+    sekarang = datetime.now()
+
+    folder = os.path.join(
+        "backup",
+        str(sekarang.year),
+        str(sekarang.month).zfill(2)
+    )
+
+    os.makedirs(folder, exist_ok=True)
+
+    nama_file = (
+        "kasir-"
+        + sekarang.strftime("%Y-%m-%d-%H%M%S")
+        + ".db"
+    )
+
+    tujuan = os.path.join(folder, nama_file)
+
+    shutil.copy2(
         "kasir.db",
-        filename="backup-kasir-" + date.today().isoformat() + ".db",
-        media_type="application/octet-stream",
+        tujuan
+    )
+
+    return RedirectResponse(
+        "/backup-restore",
+        status_code=303
     )
 
 
 @app.get("/restore/list")
 def list_backup():
+
     hasil = []
 
     folder = "backup"
 
     if os.path.exists(folder):
+
         for root, dirs, files in os.walk(folder):
+
+            if "sebelum_restore" in root:
+                continue
+
+            if "log_restore" in root:
+                continue
+
             for file in files:
+
                 if file.endswith(".db"):
-                    hasil.append(os.path.join(root, file))
+
+                    path = os.path.join(root, file)
+
+                    hasil.append({
+                        "file": path,
+                        "nama": file,
+                        "ukuran": f"{os.path.getsize(path)/1024:.1f} KB",
+                        "waktu": datetime.fromtimestamp(
+                            os.path.getmtime(path)
+                        ).strftime("%d/%m/%Y %H:%M")
+                    })
+
 
     return {
-        "backup": sorted(hasil, reverse=True)
+        "backup": sorted(
+            hasil,
+            key=lambda x:x["waktu"],
+            reverse=True
+        )
     }
 
 
 @app.post("/restore")
-def restore_backup(file: str):
+def restore_backup(file: str = Form(...)):
     if not os.path.exists(file):
         raise HTTPException(
             status_code=404,
@@ -710,11 +769,188 @@ def restore_backup(file: str):
 
     shutil.copy2(file, "kasir.db")
 
+    os.makedirs("backup/log_restore", exist_ok=True)
+
+    log_file = (
+        "backup/log_restore/restore-"
+        + datetime.now().strftime("%Y%m%d-%H%M%S")
+        + ".txt"
+    )
+
+    with open(log_file, "w", encoding="utf-8") as f:
+        f.write(
+            "RESTORE DATABASE\\n\\n"
+            + "Waktu : "
+            + str(datetime.now())
+            + "\\n"
+            + "Sumber : "
+            + file
+            + "\\n"
+            + "Backup sebelum restore : "
+            + cadangan_lama
+            + "\\n"
+        )
+
     return {
         "ok": True,
         "pesan": "Database berhasil dipulihkan",
         "sebelum_restore": cadangan_lama
     }
+
+
+
+@app.get("/restore/history")
+def restore_history():
+
+    hasil = []
+
+    folder = "backup/log_restore"
+
+    if os.path.exists(folder):
+        for file in os.listdir(folder):
+            if file.endswith(".txt"):
+                path = os.path.join(folder, file)
+
+                with open(path, "r", encoding="utf-8") as f:
+                    isi = f.read()
+
+                hasil.append({
+                    "nama": file,
+                    "isi": isi,
+                    "waktu": datetime.fromtimestamp(
+                        os.path.getmtime(path)
+                    ).strftime("%d/%m/%Y %H:%M")
+                })
+
+    return sorted(
+        hasil,
+        key=lambda x:x["waktu"],
+        reverse=True
+    )
+
+
+@app.get("/backup-restore")
+def backup_restore(request: Request):
+    hasil = []
+
+    folder = "backup"
+
+    if os.path.exists(folder):
+        for root, dirs, files in os.walk(folder):
+
+            if "sebelum_restore" in root:
+                continue
+
+            if "log_restore" in root:
+                continue
+
+            for file in files:
+                if file.endswith(".db"):
+                    path = os.path.join(root, file)
+
+                    ukuran = os.path.getsize(path)
+
+                    hasil.append({
+                        "file": path,
+                        "nama": file,
+                        "ukuran": str(round(ukuran / 1024, 1)) + " KB",
+                        "waktu": datetime.fromtimestamp(
+                            os.path.getmtime(path)
+                        ).strftime("%d/%m/%Y %H:%M")
+                    })
+
+    hasil = sorted(
+        hasil,
+        key=lambda x: x["waktu"],
+        reverse=True
+    )
+
+    total_backup = len(hasil)
+
+    total_ukuran = sum(
+        os.path.getsize(x["file"])
+        for x in hasil
+    )
+
+    total_ukuran = str(
+        round(total_ukuran / 1024, 1)
+    ) + " KB"
+
+    backup_terakhir = (
+        hasil[0]["waktu"]
+        if hasil
+        else "-"
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "backup_restore.html",
+        {
+            "backup": hasil,
+            "total_backup": total_backup,
+            "total_ukuran": total_ukuran,
+            "backup_terakhir": backup_terakhir,
+            "restore_info": restore_history()
+        }
+    )
+
+
+
+@app.get("/backup/download")
+def download_backup(file: str):
+    if not os.path.exists(file):
+        raise HTTPException(status_code=404, detail="Backup tidak ditemukan")
+
+    return FileResponse(
+        file,
+        filename=os.path.basename(file),
+        media_type="application/octet-stream"
+    )
+
+
+
+
+@app.post("/backup/delete")
+def delete_backup(file: str):
+
+    if not os.path.exists(file):
+        raise HTTPException(
+            status_code=404,
+            detail="Backup tidak ditemukan"
+        )
+
+    if not file.startswith("backup"):
+        raise HTTPException(
+            status_code=403,
+            detail="File tidak valid"
+        )
+
+    semua = []
+
+    for root, dirs, files in os.walk("backup"):
+        for nama in files:
+            if nama.endswith(".db"):
+                semua.append(
+                    os.path.join(root, nama)
+                )
+
+    terbaru = max(
+        semua,
+        key=os.path.getmtime
+    )
+
+    if file == terbaru:
+        raise HTTPException(
+            status_code=403,
+            detail="Backup terbaru tidak boleh dihapus"
+        )
+
+    os.remove(file)
+
+    return RedirectResponse(
+        "/backup-restore",
+        status_code=303
+    )
 
 
 def sesi_valid(token):
