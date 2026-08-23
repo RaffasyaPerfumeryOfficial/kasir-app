@@ -1,5 +1,25 @@
-*.db
-fragella.py
+# Virtual Environment
+.venv/
+venv/
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+
+# Database
+*.db
+
+# Backup database
 backup/
+
+# Temporary patch files
+patch_*.py
+
+# File eksperimen lama
+*_sebelum_*.py
+*_sebelum_*.html
+
+# OS
+Thumbs.db
+.DS_Store
