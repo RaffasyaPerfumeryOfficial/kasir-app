@@ -5,6 +5,8 @@ import random
 import secrets
 import string
 from datetime import date, datetime, timedelta
+import os
+import shutil
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -595,6 +597,7 @@ def tambah_pengeluaran(
 def tambah_pemasukan(keterangan: str = Form(...), jumlah: float = Form(...), db: Session = Depends(get_db)):
     db.add(models.Pemasukan(keterangan=keterangan, jumlah=jumlah))
     db.commit()
+    backup_otomatis()
     return {"ok": True}
 
 
@@ -609,11 +612,25 @@ def tutup_preview(db: Session = Depends(get_db)):
     return buat_ringkasan(db)
 
 
+
+def backup_otomatis():
+    folder = "backup"
+
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    nama_file = "kasir-" + date.today().isoformat() + ".db"
+
+    tujuan = os.path.join(folder, nama_file)
+
+    shutil.copy2("kasir.db", tujuan)
+
 @app.post("/tutup/simpan")
 async def tutup_simpan(request: Request, db: Session = Depends(get_db)):
     d = await request.json()
     db.add(models.RiwayatTutup(omzet=d.get("omzet", 0), tunai=d.get("tunai", 0), nontunai=d.get("nontunai", 0), pengeluaran=d.get("pengeluaran", 0), ringkasan=d.get("text", "")))
     db.commit()
+    backup_otomatis()
     return {"ok": True}
 
 
@@ -1741,6 +1758,7 @@ async def pengeluaran_cepat(request: Request, db: Session = Depends(get_db)):
     peng.jumlah = jumlah
     db.add(peng)
     db.commit()
+    backup_otomatis()
     return {"ok": True}
 
 def buat_ringkasan(db):
