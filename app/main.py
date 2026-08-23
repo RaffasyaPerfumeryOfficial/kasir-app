@@ -673,6 +673,48 @@ def backup_db():
     )
 
 
+@app.get("/restore/list")
+def list_backup():
+    hasil = []
+
+    folder = "backup"
+
+    if os.path.exists(folder):
+        for root, dirs, files in os.walk(folder):
+            for file in files:
+                if file.endswith(".db"):
+                    hasil.append(os.path.join(root, file))
+
+    return {
+        "backup": sorted(hasil, reverse=True)
+    }
+
+
+@app.post("/restore")
+def restore_backup(file: str):
+    if not os.path.exists(file):
+        raise HTTPException(
+            status_code=404,
+            detail="File backup tidak ditemukan"
+        )
+
+    cadangan_lama = (
+        "backup/kasir-sebelum-restore-"
+        + datetime.now().strftime("%Y%m%d-%H%M%S")
+        + ".db"
+    )
+
+    shutil.copy2("kasir.db", cadangan_lama)
+
+    shutil.copy2(file, "kasir.db")
+
+    return {
+        "ok": True,
+        "pesan": "Database berhasil dipulihkan",
+        "sebelum_restore": cadangan_lama
+    }
+
+
 def sesi_valid(token):
     dbx = SessionLocal()
     try:
