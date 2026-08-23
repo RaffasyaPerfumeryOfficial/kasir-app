@@ -698,8 +698,10 @@ def restore_backup(file: str):
             detail="File backup tidak ditemukan"
         )
 
+    os.makedirs("backup/sebelum_restore", exist_ok=True)
+
     cadangan_lama = (
-        "backup/kasir-sebelum-restore-"
+        "backup/sebelum_restore/kasir-sebelum-restore-"
         + datetime.now().strftime("%Y%m%d-%H%M%S")
         + ".db"
     )
@@ -2701,5 +2703,6 @@ def buat_teks_struk(db, t):
     L.append("Terima kasih")
     L.append("Parfum Anda, cerita Anda.")
     return "\n".join(L)
+
 
 
