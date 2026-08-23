@@ -1,3 +1,4 @@
 *.db
 fragella.py
-fragella.py
+__pycache__/
+*.pyc
