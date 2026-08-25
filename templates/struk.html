@@ -27,15 +27,57 @@
   <table style="width:100%;font-size:14px">
     <tr><td><strong>TOTAL</strong></td><td style="text-align:right"><strong>Rp {{ "%0.0f"|format(t.total or 0) }}</strong></td></tr>
     {% if t.total_diskon %}<tr><td>Diskon</td><td style="text-align:right">{{ "%0.0f"|format(t.total_diskon) }}</td></tr>{% endif %}
-    {% if t.poin_dipakai %}<tr><td>POIN dipakai</td><td style="text-align:right">-{{ "%0.0f"|format(t.poin_dipakai) }}</td></tr>{% endif %}
-    <tr><td>Bayar</td><td style="text-align:right">{{ "%0.0f"|format(t.bayar or 0) }}</td></tr>
-    <tr><td>Kembali</td><td style="text-align:right">{{ "%0.0f"|format(t.kembalian or 0) }}</td></tr>
+
+    <tr>
+      <td><strong>PEMBAYARAN</strong></td>
+      <td></td>
+    </tr>
+
+    {% if t.poin_dipakai %}
+    <tr>
+      <td>Poin</td>
+      <td style="text-align:right">-{{ "%0.0f"|format(t.poin_dipakai) }}</td>
+    </tr>
+    {% endif %}
+
+    {% if t.bayar %}
+    <tr>
+      <td>Tunai</td>
+      <td style="text-align:right">{{ "%0.0f"|format(t.bayar) }}</td>
+    </tr>
+    {% endif %}
+
+    {% if t.p_nontunai %}
+    <tr>
+      <td>QRIS</td>
+      <td style="text-align:right">{{ "%0.0f"|format(t.p_nontunai) }}</td>
+    </tr>
+    {% endif %}
+
+    <tr>
+      <td><strong>TOTAL BAYAR</strong></td>
+      <td style="text-align:right">
+        <strong>Rp {{ "%0.0f"|format((t.total or 0) - (t.poin_dipakai or 0)) }}</strong>
+      </td>
+    </tr>
+
+    {% if not t.poin_dipakai and not t.p_nontunai %}
+    <tr>
+      <td>Kembali</td>
+      <td style="text-align:right">{{ "%0.0f"|format(t.kembalian or 0) }}</td>
+    </tr>
+    {% endif %}
   </table>
   {% if ag %}
   <hr style="border-top:1px dashed #94a3b8">
   <table style="width:100%;font-size:14px">
     <tr><td>Anggota</td><td style="text-align:right">{{ ag.nama }} ({{ ag.nomor_member }})</td></tr>
-    <tr><td>Poin tambah</td><td style="text-align:right">+{{ "%0.0f"|format(pl.poin or 0) }}</td></tr>
+    {% if pl and pl.poin > 0 %}
+<tr>
+<td>Poin tambah</td>
+<td style="text-align:right">+{{ "%0.0f"|format(pl.poin) }}</td>
+</tr>
+{% endif %}
     <tr><td>Poin total</td><td style="text-align:right">{{ "%0.0f"|format(ag.poin or 0) }}</td></tr>
   </table>
   {% endif %}
@@ -54,9 +96,9 @@ function kirimWAStruk(){
 
     var pesan = {{ teks|tojson }};
 
-    var url = "https://wa.me/?text=" + encodeURIComponent(pesan);
+    var url = "https://api.whatsapp.com/send?text=" + encodeURIComponent(pesan);
 
-    window.open(url, "_blank");
+    window.location.href = url;
 
 }
 </script>

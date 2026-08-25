@@ -35,6 +35,7 @@ class ProdukOut(ProdukCreate):
 class Transaksi(Base):
     __tablename__ = "transaksi"
     poin_dipakai = Column(Float, default=0)
+    poin_setelah = Column(Float, default=0)
 
     id = Column(Integer, primary_key=True, index=True)
     kode_trx = Column(String, default="")
@@ -96,6 +97,8 @@ def migrate_db():
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN metode VARCHAR"))
             if "total_diskon" not in cols:
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN total_diskon FLOAT"))
+            if "poin_setelah" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN poin_setelah FLOAT"))
             if "p_tunai" not in cols:
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN p_tunai FLOAT"))
             if "p_nontunai" not in cols:

@@ -18,7 +18,8 @@ td { vertical-align: top; padding: 1px 0; }
 <body onload="setTimeout(function(){window.print()},300)">
 <div class="c">
 <img src="/static/logo.png" style="width:56px;height:56px;object-fit:contain;margin:0 auto 4px;display:block">
-<strong style="font-size:14px">MEKAR SARI</strong> <span style="font-size:10px">perfumery</span><br>
+<strong style="font-size:16px">MEKAR SARI</strong><br>
+<span style="font-size:11px">Refill Perfumery</span><br>
 <span style="font-size:10px">Refill Perfumery</span><br>
 <span style="font-size:9px">Jl. Mekar Sari No.5, Bekasi Jaya, Kec. Bekasi Tim.,</span><br>
 <span style="font-size:9px">Kota Bks, Jawa Barat 17112</span><br>
@@ -33,6 +34,7 @@ td { vertical-align: top; padding: 1px 0; }
 <tr><td style="width:32%">Pelanggan</td><td>: {% if ag %}{{ ag.nama }}{% else %}MS - UMUM{% endif %}</td></tr>
 <tr><td>Transaksi</td><td>: {{ now_str }}</td></tr>
 <tr><td>Karyawan</td><td>: MKSR - Admin</td></tr>
+<tr><td>Metode</td><td>: {{ (t.metode or "TUNAI").replace("POIN + NON-TUNAI (","").replace(")","") }}</td></tr>
 </table>
 <div class="line"></div>
 {% if ulang %}
@@ -53,13 +55,42 @@ td { vertical-align: top; padding: 1px 0; }
 <tr><td class="r">Total :</td><td class="r">{{ (t.total or 0)|rpx }}</td></tr>
 </table>
 <div class="line"></div>
+
 <table>
 <tr>
-<td class="r" style="font-weight:bold">TOTAL</td>
-<td class="r" style="font-size:16px;font-weight:bold">
-{{ (t.total or 0)|rpx }}
+<td class="r" style="font-weight:bold">PEMBAYARAN</td>
+<td class="r"></td>
+</tr>
+
+{% if t.poin_dipakai %}
+<tr>
+<td class="r">Poin :</td>
+<td class="r">-{{ (t.poin_dipakai or 0)|rpx }}</td>
+</tr>
+{% endif %}
+
+{% if t.p_tunai %}
+<tr>
+<td class="r">Tunai :</td>
+<td class="r">{{ (t.p_tunai or 0)|rpx }}</td>
+</tr>
+{% endif %}
+
+{% if t.p_nontunai %}
+<tr>
+<td class="r">QRIS :</td>
+<td class="r">{{ (t.p_nontunai or 0)|rpx }}</td>
+</tr>
+{% endif %}
+
+<tr>
+<td class="r" style="font-weight:bold">TOTAL BAYAR</td>
+<td class="r" style="font-weight:bold">
+{{ ((t.total or 0) - (t.poin_dipakai or 0))|rpx }}
 </td>
 </tr>
+
+{% if not nontunai and not t.poin_dipakai %}
 <tr>
 <td class="r">Bayar :</td>
 <td class="r">{{ (t.bayar or 0)|rpx }}</td>
@@ -68,24 +99,31 @@ td { vertical-align: top; padding: 1px 0; }
 <td class="r">Kembali :</td>
 <td class="r">{{ (t.kembalian or 0)|rpx }}</td>
 </tr>
+{% endif %}
 </table>
+
 <div class="line"></div>
-{% if t.poin_dipakai %}
-<table><tr><td class="r" style="width:60%">POIN :</td><td class="r">{{ (t.poin_dipakai or 0)|rpx }}</td></tr></table>
-<div class="line"></div>
-{% endif %}
-{% if nontunai %}
-<table><tr><td class="r" style="width:60%">{{ t.metode }} :</td><td class="r">{{ (t.total or 0)|rpx }}</td></tr></table>
-<div class="line"></div>
-{% endif %}
+
 {% if ag %}
 <table>
-<tr><td style="width:60%">Poin +</td><td class="r">{{ "%0.0f"|format(pl.poin or 0) }}</td></tr>
-<tr><td>Total poin</td><td class="r">{{ "%0.0f"|format(ag.poin or 0) }}</td></tr>
+{% if pl and pl.poin > 0 %}
+
+{% endif %}
+{% if pl and pl.poin > 0 %}
+<tr><td>Poin tambah</td><td class="r">+{{ "%0.0f"|format(pl.poin) }}</td></tr>
+{% endif %}
+<tr><td>Sisa poin</td><td class="r">{{ "%0.0f"|format(ag.poin or 0) }}</td></tr>
 </table>
 <div class="line"></div>
 {% endif %}
-<div class="c" style="margin-top:8px">Terima Kasih</div>`n`n<div class="c" style="font-size:11px;margin-top:4px">Simpan struk ini sebagai bukti yang sah</div>
+<div class="c" style="margin-top:8px;font-weight:bold">
+TERIMA KASIH
+</div>
+
+<div class="c" style="font-size:11px;margin-top:6px">
+Simpan struk ini sebagai<br>
+bukti pembayaran yang sah.
+</div>
 <p class="noprint" style="text-align:center">
 <button onclick="window.print()">Cetak Lagi</button>
 <button style="background:#25D366" onclick="kirimWAStruk()">📱 WA</button>
