@@ -2189,7 +2189,7 @@ def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
         request,
         "struk.html",
         {
-            "trx": t,
+            "t": t,
             "teks": teks
         }
     )
