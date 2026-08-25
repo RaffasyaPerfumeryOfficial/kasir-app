@@ -38,8 +38,12 @@ def backup_database():
 
     folder.mkdir(exist_ok=True)
 
-    nama = "kasir_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
+    # 1 backup maksimal per hari
+    nama = "kasir_" + datetime.now().strftime("%Y%m%d") + ".db"
     tujuan = folder / nama
+
+    if tujuan.exists():
+        return
 
     shutil.copy2(db_file, tujuan)
 
