@@ -32,24 +32,40 @@ app = FastAPI(title="Aplikasi Kasir")
 def backup_database(jenis="auto"):
     db_file = "kasir.db"
 
-    if not Path(db_file).exists():
-        return
-
     folder = Path("backup") / jenis
     folder.mkdir(parents=True, exist_ok=True)
 
-    nama = jenis + "_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
+    if not Path(db_file).exists():
+        return
 
-    tujuan = folder / nama
+
+    if jenis == "auto":
+
+        nama = "auto_" + datetime.now().strftime("%Y%m%d") + ".db"
+
+        tujuan = folder / nama
+
+        # hanya 1 backup otomatis per hari
+        if tujuan.exists():
+            return
+
+    else:
+
+        nama = jenis + "_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
+
+        tujuan = folder / nama
+
 
     shutil.copy2(db_file, tujuan)
 
-    # simpan maksimal 30 backup per jenis
+
+    # maksimal 30 file tiap kategori
     files = sorted(
         folder.glob("*.db"),
         key=lambda x: x.stat().st_mtime,
         reverse=True
     )
+
 
     for f in files[30:]:
         f.unlink()
