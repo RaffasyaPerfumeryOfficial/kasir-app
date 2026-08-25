@@ -299,24 +299,24 @@ opacity:.85;
 
 <div>
 
-<h3>💾 Database Backup</h3>
+<h3>?? Database Backup</h3>
 
 <div class="backup-info">
 
 Backup otomatis:
 <br>
-✓ Saat Tutup Kasir
+? Saat Tutup Kasir
 <br>
-✓ Backup manual
+? Backup manual
 <br>
-✓ Sebelum Restore otomatis
+? Sebelum Restore otomatis
 
 </div>
 
 </div>
 
 
-<form method="post" action="/backup/create">
+<form method="post" action="/backup/manual">
 
 <button class="btn-backup">
 ＋ Buat Backup Sekarang
@@ -363,7 +363,7 @@ Backup otomatis:
 
 <div class="card">
 
-<h3>📦 Daftar Backup Database</h3>
+<h3>?? Daftar Backup Database</h3>
 <p style="color:#64748b;margin-top:-8px">
 Pilih backup untuk download, restore, atau hapus.
 </p>
@@ -391,8 +391,8 @@ Pilih backup untuk download, restore, atau hapus.
 {% elif "auto" in b.nama %}
 <span class="badge-auto">Otomatis</span>
 
-{% elif "kasir-" in b.nama %}
-<span class="badge-manual">Manual</span>
+{% elif "kasir_" in b.nama %}
+<span class="badge-auto">Backup Harian</span>
 
 {% else %}
 <span class="badge-auto">Otomatis</span>
@@ -415,19 +415,17 @@ Pilih backup untuk download, restore, atau hapus.
 
 <a href="/backup/download?file={{ b.file }}">
 <button type="button" class="action-btn download">
-⬇ Download
+? Download
 </button>
 </a>
 
 
-<form method="post" action="/restore">
-
-<input type="hidden" name="file" value="{{ b.file }}">
+<form method="post" action="/backup/restore/{{ b.nama }}">
 
 <button 
 class="action-btn restore"
 onclick="return confirm('PERINGATAN! Database aktif akan diganti. Backup sebelum restore akan dibuat otomatis. Lanjutkan restore?')">
-↻ Restore
+? Restore
 </button>
 
 </form>

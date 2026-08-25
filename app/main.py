@@ -29,27 +29,24 @@ app = FastAPI(title="Aplikasi Kasir")
 
 # ================= BACKUP OTOMATIS DATABASE =================
 
-def backup_database():
+def backup_database(jenis="auto"):
     db_file = "kasir.db"
-    folder = Path("backup")
 
     if not Path(db_file).exists():
         return
 
-    folder.mkdir(exist_ok=True)
+    folder = Path("backup") / jenis
+    folder.mkdir(parents=True, exist_ok=True)
 
-    # 1 backup maksimal per hari
-    nama = "kasir_" + datetime.now().strftime("%Y%m%d") + ".db"
+    nama = jenis + "_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
+
     tujuan = folder / nama
-
-    if tujuan.exists():
-        return
 
     shutil.copy2(db_file, tujuan)
 
-    # simpan maksimal 30 backup
+    # simpan maksimal 30 backup per jenis
     files = sorted(
-        folder.glob("kasir_*.db"),
+        folder.glob("*.db"),
         key=lambda x: x.stat().st_mtime,
         reverse=True
     )
@@ -60,7 +57,7 @@ def backup_database():
 
 @app.on_event("startup")
 def auto_backup_database():
-    backup_database()
+    backup_database("auto")
 
 # ================= END BACKUP =================
 
@@ -369,6 +366,55 @@ def void_transaksi(
     return RedirectResponse("/riwayat", status_code=303)
 
 
+
+
+
+@app.get("/backup/list")
+def backup_list():
+    folder = Path("backup")
+    folder.mkdir(exist_ok=True)
+
+    data = []
+
+    for f in sorted(folder.glob("kasir_*.db"), reverse=True):
+        data.append({
+            "nama": f.name,
+            "ukuran": round(f.stat().st_size / 1024, 1)
+        })
+
+    return data
+
+
+@app.post("/backup/manual")
+def backup_manual():
+    backup_database()
+    return RedirectResponse("/backup-restore", status_code=303)
+
+
+@app.post("/backup/restore/{nama}")
+def backup_restore(nama: str):
+
+    folder = Path("backup")
+    file_backup = folder / nama
+
+    if not file_backup.exists():
+        raise HTTPException(404, "Backup tidak ditemukan")
+
+    # backup kondisi sekarang sebelum restore
+    sekarang = folder / (
+        "sebelum_restore_" +
+        datetime.now().strftime("%Y%m%d_%H%M%S") +
+        ".db"
+    )
+
+    shutil.copy2("kasir.db", sekarang)
+
+    shutil.copy2(file_backup, "kasir.db")
+
+    return RedirectResponse(
+        "/backup-restore",
+        status_code=303
+    )
 
 @app.get("/manajemen")
 def manajemen_produk(request: Request, db: Session = Depends(get_db)):
