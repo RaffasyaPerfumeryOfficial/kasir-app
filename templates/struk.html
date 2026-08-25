@@ -52,7 +52,7 @@ var WA_URL="{{ wa_url|safe }}";
 
 function kirimWAStruk(){
 
-    var pesan = {{ teks|safe }};
+    var pesan = {{ teks|tojson }};
 
     var url = "https://wa.me/?text=" + encodeURIComponent(pesan);
 
