@@ -2476,43 +2476,6 @@ def struk_wa(trx_id: int, db: Session = Depends(get_db)):
     return {"text": text, "url": url}
 
 
-@app.get("/struk/{trx_id}")
-def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
-    from urllib.parse import quote
-    t = db.get(models.Transaksi, trx_id)
-    if not t:
-        raise HTTPException(404, "Struk tidak ditemukan")
-    raw = json.loads(t.items)
-    for it in raw:
-        if not it.get("harga"):
-            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
-            it["harga"] = pr.harga if pr else 0
-    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
-    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
-    text = buat_teks_struk(db, t)
-    hp = (ag.no_hp or "") if ag else ""
-    digits = "".join(ch for ch in hp if ch.isdigit())
-    if digits.startswith("0"):
-        digits = "62" + digits[1:]
-    wa_url = ("https://wa.me/" + digits + "?text=" if digits else "https://wa.me/?text=") + quote(text)
-    return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl, "wa_url": wa_url})
-
-
-
-def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
-    t = db.get(models.Transaksi, trx_id)
-    if not t:
-        raise HTTPException(404, "Struk tidak ditemukan")
-    raw = json.loads(t.items)
-    for it in raw:
-        if not it.get("harga"):
-            pr = db.query(models.Produk).filter_by(nama=it["nama"]).first()
-            it["harga"] = pr.harga if pr else 0
-    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
-    ag = db.get(models.Anggota, pl.anggota_id) if pl else None
-    return templates.TemplateResponse(request, "struk.html", {"t": t, "items": raw, "ag": ag, "pl": pl})
-
-
 def _rpx(x):
     try:
         x = float(x)
