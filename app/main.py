@@ -2557,6 +2557,52 @@ def rp0(x):
 def buat_teks_struk(db, t):
     L = []
 
+    L.append("          MEKAR SARI")
+    L.append("        Refill Perfumery")
+    L.append("")
+    L.append("Jl. Mekar Sari No.5, Bekasi Jaya,")
+    L.append("Kec. Bekasi Tim., Kota Bks,")
+    L.append("Jawa Barat 17112")
+    L.append("HP: 0821-1897-1096")
+    L.append("")
+    L.append("--------------------------------")
+
+    L.append("No   : " + (t.kode_trx or ("TRX-" + str(t.id))))
+    L.append("Waktu: " + t.dibuat.strftime("%d/%m/%Y %H:%M"))
+
+    L.append("--------------------------------")
+    L.append("")
+    L.append("DETAIL PEMBELIAN")
+    L.append("")
+
+    for it in json.loads(t.items):
+        L.append(it["nama"])
+        L.append(
+            "  " +
+            str(it["jumlah"]) +
+            " x " +
+            rp0(it.get("harga") or 0) +
+            " = " +
+            rp0((it.get("harga") or 0) * it["jumlah"])
+        )
+        L.append("")
+
+    L.append("--------------------------------")
+    L.append("TOTAL  : " + rp0(t.total or 0))
+    L.append("BAYAR  : " + rp0(t.bayar or 0))
+    L.append("KEMBALI: " + rp0(t.kembalian or 0))
+    L.append("Metode : " + (t.metode or "TUNAI"))
+    L.append("--------------------------------")
+
+    L.append("")
+    L.append("          TERIMA KASIH")
+    L.append("")
+    L.append("Simpan struk ini sebagai")
+    L.append("bukti pembayaran yang sah.")
+
+    return "\n".join(L)
+
+
     L.append("?? *MEKAR SARI*")
     L.append("*Refill Perfumery*")
     L.append("Jl. Mekar Sari No.5, Bekasi Jaya")
