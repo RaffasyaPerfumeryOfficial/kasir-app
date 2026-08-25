@@ -2175,6 +2175,26 @@ def jawab_fitur(q, db):
                 return out
     return None
 
+
+@app.get("/struk/{trx_id}")
+def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
+    t = db.get(models.Transaksi, trx_id)
+
+    if not t:
+        raise HTTPException(404, "Transaksi tidak ditemukan")
+
+    teks = buat_teks_struk(db, t)
+
+    return templates.TemplateResponse(
+        request,
+        "struk.html",
+        {
+            "trx": t,
+            "teks": teks
+        }
+    )
+
+
 @app.get("/struk/{trx_id}/print")
 def struk_print(trx_id: int, request: Request, ulang: str = "", db: Session = Depends(get_db)):
     t = db.get(models.Transaksi, trx_id)
