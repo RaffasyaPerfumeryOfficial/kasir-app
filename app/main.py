@@ -403,7 +403,7 @@ def backup_list():
 
 @app.post("/backup/manual")
 def backup_manual():
-    backup_database()
+    backup_database("manual")
     return RedirectResponse("/backup-restore", status_code=303)
 
 
@@ -848,78 +848,38 @@ def backup_db():
 
 
 
+
 @app.post("/backup/create")
 def buat_backup_manual():
 
-    sekarang = datetime.now()
+    folder = Path("backup/manual")
 
-    folder = os.path.join(
-        "backup",
-        str(sekarang.year),
-        str(sekarang.month).zfill(2)
+    folder.mkdir(
+        parents=True,
+        exist_ok=True
     )
 
-    os.makedirs(folder, exist_ok=True)
 
-    nama_file = (
-        "kasir-"
-        + sekarang.strftime("%Y-%m-%d-%H%M%S")
+    nama = (
+        "manual_"
+        + datetime.now().strftime("%Y%m%d_%H%M%S")
         + ".db"
     )
 
-    tujuan = os.path.join(folder, nama_file)
+
+    tujuan = folder / nama
+
 
     shutil.copy2(
         "kasir.db",
         tujuan
     )
 
+
     return RedirectResponse(
         "/backup-restore",
         status_code=303
     )
-
-
-@app.get("/restore/list")
-def list_backup():
-
-    hasil = []
-
-    folder = "backup"
-
-    if os.path.exists(folder):
-
-        for root, dirs, files in os.walk(folder):
-
-            if "sebelum_restore" in root:
-                continue
-
-            if "log_restore" in root:
-                continue
-
-            for file in files:
-
-                if file.endswith(".db"):
-
-                    path = os.path.join(root, file)
-
-                    hasil.append({
-                        "file": path,
-                        "nama": file,
-                        "ukuran": f"{os.path.getsize(path)/1024:.1f} KB",
-                        "waktu": datetime.fromtimestamp(
-                            os.path.getmtime(path)
-                        ).strftime("%d/%m/%Y %H:%M")
-                    })
-
-
-    return {
-        "backup": sorted(
-            hasil,
-            key=lambda x:x["waktu"],
-            reverse=True
-        )
-    }
 
 
 @app.post("/restore")
@@ -1002,43 +962,67 @@ def restore_history():
     )
 
 
+
 @app.get("/backup-restore")
 def backup_restore(request: Request):
+
     hasil = []
 
     folder = "backup"
 
     if os.path.exists(folder):
+
         for root, dirs, files in os.walk(folder):
 
-            if "sebelum_restore" in root:
-                continue
-
-            if "log_restore" in root:
-                continue
-
             for file in files:
-                if file.endswith(".db"):
-                    path = os.path.join(root, file)
 
-                    ukuran = os.path.getsize(path)
+                if file.endswith(".db"):
+
+                    path = os.path.join(root,file)
+
+                    if "auto" in root:
+                        jenis = "Otomatis"
+
+                    elif "manual" in root:
+                        jenis = "Manual"
+
+                    elif "restore" in root:
+                        jenis = "Restore"
+
+                    else:
+                        jenis = "Lainnya"
+
 
                     hasil.append({
                         "file": path,
                         "nama": file,
-                        "ukuran": str(round(ukuran / 1024, 1)) + " KB",
+                        "jenis": jenis,
+                        "ukuran": str(round(os.path.getsize(path)/1024,1))+" KB",
                         "waktu": datetime.fromtimestamp(
                             os.path.getmtime(path)
                         ).strftime("%d/%m/%Y %H:%M")
                     })
 
+
     hasil = sorted(
         hasil,
-        key=lambda x: x["waktu"],
+        key=lambda x:x["waktu"],
         reverse=True
     )
 
-    total_backup = len(hasil)
+
+    total_auto = len(
+        [x for x in hasil if x["jenis"]=="Otomatis"]
+    )
+
+    total_manual = len(
+        [x for x in hasil if x["jenis"]=="Manual"]
+    )
+
+    total_restore = len(
+        [x for x in hasil if x["jenis"]=="Restore"]
+    )
+
 
     total_ukuran = sum(
         os.path.getsize(x["file"])
@@ -1046,27 +1030,27 @@ def backup_restore(request: Request):
     )
 
     total_ukuran = str(
-        round(total_ukuran / 1024, 1)
-    ) + " KB"
+        round(total_ukuran/1024,1)
+    )+" KB"
 
-    backup_terakhir = (
-        hasil[0]["waktu"]
-        if hasil
-        else "-"
-    )
 
     return templates.TemplateResponse(
         request,
         "backup_restore.html",
         {
             "backup": hasil,
-            "total_backup": total_backup,
+
+            "total_auto": total_auto,
+
+            "total_manual": total_manual,
+
+            "total_restore": total_restore,
+
             "total_ukuran": total_ukuran,
-            "backup_terakhir": backup_terakhir,
+
             "restore_info": restore_history()
         }
     )
-
 
 
 @app.get("/backup/download")

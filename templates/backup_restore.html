@@ -339,17 +339,26 @@ Backup otomatis:
 
 <div class="card">
 
+
 <div style="display:flex;gap:15px;flex-wrap:wrap">
 
 <div class="card" style="flex:1;min-width:180px">
-<h3>Total Backup</h3>
-<h2>{{ total_backup }}</h2>
+<h3>Auto Backup</h3>
+<h2>{{ total_auto }}</h2>
 </div>
 
+
 <div class="card" style="flex:1;min-width:180px">
-<h3>Backup Terakhir</h3>
-<h2 style="font-size:18px">{{ backup_terakhir }}</h2>
+<h3>Manual Backup</h3>
+<h2>{{ total_manual }}</h2>
 </div>
+
+
+<div class="card" style="flex:1;min-width:180px">
+<h3>Restore Point</h3>
+<h2>{{ total_restore }}</h2>
+</div>
+
 
 <div class="card" style="flex:1;min-width:180px">
 <h3>Total Ukuran</h3>
@@ -357,6 +366,7 @@ Backup otomatis:
 </div>
 
 </div>
+
 
 </div>
 
