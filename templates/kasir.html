@@ -308,7 +308,7 @@ else if(h.non>0)metode='NON-TUNAI ('+ch+')';
 else metode='TUNAI';
 if(h.poin>0)metode='POIN + '+metode;
 var dt=numVal('diskon_all');
-var payload={items:cart.map(function(i){return {produk_id:i.id,jumlah:i.jumlah,diskon:i.diskon||0};}),diskon_total:dt,anggota_id:(document.getElementById('anggota_sel').value||''),poin_dipakai:h.poin,tunai:h.tunai,kembalian:h.kemb,metode:metode};
+var payload={items:cart.map(function(i){return {produk_id:i.id,jumlah:i.jumlah,diskon:i.diskon||0};}),diskon_total:dt,anggota_id:(document.getElementById('anggota_sel').value||''),poin_dipakai:h.poin,tunai:h.tunai,kembalian:h.kemb,metode:metode,request_id:crypto.randomUUID()};
 fetch('/transaksi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json()).then(d=>{
 if(d.ok){cart=[];localStorage.removeItem('mekarsari_cart');var da=document.getElementById('diskon_all');if(da)da.value='0';document.getElementById('modalBayar').style.display='none';window.location.href='/struk/'+d.id;}
 else{alert(d.detail||'Gagal');}
@@ -384,7 +384,7 @@ function selesaiTutup(){document.getElementById('modalTutup').style.display='non
 function konfirmasi(){
 const m=document.querySelector('input[name=metode]:checked').value;
 const dt=numVal('diskon_all');
-const payload={items:cart.map(i=>({produk_id:i.id,jumlah:i.jumlah,diskon:i.diskon||0})),diskon_total:dt,anggota_id:(document.getElementById('anggota_sel').value||'')};
+const payload={items:cart.map(i=>({produk_id:i.id,jumlah:i.jumlah,diskon:i.diskon||0})),diskon_total:dt,anggota_id:(document.getElementById('anggota_sel').value||''),request_id:crypto.randomUUID()};
 if(m==='TUNAI'){
 const b=numVal('bayar');
 if(b<T){alert('Uang bayar kurang');return;}

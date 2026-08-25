@@ -39,6 +39,7 @@ class Transaksi(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     kode_trx = Column(String, default="")
+    request_id = Column(String, unique=True)
     items = Column(String)
     total = Column(Float, default=0.0)
     total_modal = Column(Float, default=0.0)
@@ -91,6 +92,8 @@ def migrate_db():
             cols = [c["name"] for c in insp.get_columns("transaksi")]
             if "kode_trx" not in cols:
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN kode_trx VARCHAR"))
+            if "request_id" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN request_id VARCHAR"))
             if "total_modal" not in cols:
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN total_modal FLOAT"))
             if "metode" not in cols:

@@ -448,7 +448,22 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
             status_code=400
         )
 
+    request_id = payload.get("request_id")
+
+    if request_id:
+        cek = db.query(models.Transaksi).filter(
+            models.Transaksi.request_id == request_id
+        ).first()
+
+        if cek:
+            return JSONResponse({
+                "ok": True,
+                "id": cek.id,
+                "duplicate": True
+            })
+
     t = models.Transaksi()
+    t.request_id = payload.get("request_id")
     t.items = json.dumps(rows)
     t.total = total
     t.total_diskon = dt + sum(r["diskon"] for r in rows)
