@@ -52,15 +52,12 @@ var WA_URL="{{ wa_url|safe }}";
 
 function kirimWAStruk(){
 
-    var pesan = encodeURIComponent({{ teks|safe }});
+    var pesan = {{ teks|safe }};
 
-    var app = "whatsapp://send?text=" + pesan;
+    var url = "https://wa.me/?text=" + encodeURIComponent(pesan);
 
-    window.location.href = app;
+    window.open(url, "_blank");
 
-    setTimeout(function(){
-        window.open(WA_URL,'_blank');
-    },1500);
 }
 </script>
 {% endblock %}
