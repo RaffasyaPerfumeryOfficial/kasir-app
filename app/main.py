@@ -436,6 +436,18 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
             return JSONResponse({"ok": False, "detail": "Pilih anggota dulu untuk pakai poin"}, status_code=400)
         if (ag.poin or 0) < poin:
             return JSONResponse({"ok": False, "detail": "Poin tidak cukup"}, status_code=400)
+    metode = payload.get("metode") or "TUNAI"
+    tunai = float(payload.get("tunai") or 0)
+
+    if metode == "TUNAI" and tunai < total:
+        return JSONResponse(
+            {
+                "ok": False,
+                "detail": "Pembayaran kurang"
+            },
+            status_code=400
+        )
+
     t = models.Transaksi()
     t.items = json.dumps(rows)
     t.total = total
@@ -450,11 +462,32 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
     if ag:
         if poin > 0:
             ag.poin = (ag.poin or 0) - poin
+
+            db.add(
+                models.PoinLog(
+                    anggota_id=ag.id,
+                    trx_id=t.id,
+                    poin=-poin
+                )
+            )
         if bibit_total > 0 and poin == 0:
             earn = int(bibit_total * 0.05)
             ag.poin = (ag.poin or 0) + earn
             db.add(models.PoinLog(anggota_id=ag.id, trx_id=t.id, poin=earn))
-    db.commit()
+    try:
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+
+        return JSONResponse(
+            {
+                "ok": False,
+                "detail": str(e)
+            },
+            status_code=500
+        )
+
     return {"ok": True, "id": t.id}
 
 
