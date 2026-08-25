@@ -53,7 +53,22 @@ td { vertical-align: top; padding: 1px 0; }
 <tr><td class="r">Total :</td><td class="r">{{ (t.total or 0)|rpx }}</td></tr>
 </table>
 <div class="line"></div>
-<div style="text-align:right;font-size:16px;font-weight:bold">Grand Total : {{ (t.total or 0)|rpx }}</div>
+<table>
+<tr>
+<td class="r" style="font-weight:bold">TOTAL</td>
+<td class="r" style="font-size:16px;font-weight:bold">
+{{ (t.total or 0)|rpx }}
+</td>
+</tr>
+<tr>
+<td class="r">Bayar :</td>
+<td class="r">{{ (t.bayar or 0)|rpx }}</td>
+</tr>
+<tr>
+<td class="r">Kembali :</td>
+<td class="r">{{ (t.kembalian or 0)|rpx }}</td>
+</tr>
+</table>
 <div class="line"></div>
 {% if t.poin_dipakai %}
 <table><tr><td class="r" style="width:60%">POIN :</td><td class="r">{{ (t.poin_dipakai or 0)|rpx }}</td></tr></table>
@@ -70,7 +85,7 @@ td { vertical-align: top; padding: 1px 0; }
 </table>
 <div class="line"></div>
 {% endif %}
-<div class="c" style="margin-top:8px">Terima Kasih</div>
+<div class="c" style="margin-top:8px">Terima Kasih</div>`n`n<div class="c" style="font-size:11px;margin-top:4px">Simpan struk ini sebagai bukti yang sah</div>
 <p class="noprint" style="text-align:center">
 <button onclick="window.print()">Cetak Lagi</button>
 <button style="background:#25D366" onclick="kirimWAStruk()">📱 WA</button>
