@@ -2585,8 +2585,10 @@ def buat_teks_struk(db, t):
             L.append("Poin tambah: +" + format(int(pl.poin), ",").replace(",", "."))
             L.append("Poin total : " + format(int(ag.poin or 0), ",").replace(",", "."))
     L.append("-----------------------------------------")
-    L.append("Terima kasih")
-    L.append("Parfum Anda, cerita Anda.")
+    L.append("")
+    L.append("           TERIMA KASIH")
+    L.append("")
+    L.append("Simpan struk ini sebagai bukti yang sah")
     return "\n".join(L)
 
 
