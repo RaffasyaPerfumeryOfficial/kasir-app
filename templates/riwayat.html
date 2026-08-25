@@ -40,7 +40,8 @@
       <td>
         <a href="/struk/{{ tr.id }}">Struk</a>
         {% if not tr.void %}
-        <form method="post" action="/transaksi/void/{{ tr.id }}" style="display:inline" onsubmit="return confirm('Void transaksi ini? Stok dikembalikan & omzet berkurang.')">
+        <form method="post" action="/transaksi/void/{{ tr.id }}" style="display:inline" onsubmit="return cekVoid(this)">
+          <input type="hidden" name="void_reason">
           <button class="btn-danger" type="submit">Void</button>
         </form>
         {% endif %}
@@ -49,4 +50,18 @@
     {% endfor %}
   </table>
 </div>
+<script>
+function cekVoid(form){
+    let alasan = prompt("Masukkan alasan VOID:");
+
+    if(!alasan){
+        alert("VOID dibatalkan. Alasan wajib diisi.");
+        return false;
+    }
+
+    form.querySelector("input[name='void_reason']").value = alasan;
+    return true;
+}
+</script>
+
 {% endblock %}

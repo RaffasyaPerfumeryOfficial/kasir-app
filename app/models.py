@@ -108,6 +108,12 @@ def migrate_db():
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN p_nontunai FLOAT"))
             if "void" not in cols:
                 conn.execute(text("ALTER TABLE transaksi ADD COLUMN void INTEGER"))
+            if "void_reason" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN void_reason VARCHAR"))
+            if "void_time" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN void_time DATETIME"))
+            if "void_by" not in cols:
+                conn.execute(text("ALTER TABLE transaksi ADD COLUMN void_by VARCHAR"))
             conn.execute(text(
                 "UPDATE transaksi SET p_tunai = total, p_nontunai = 0 "
                 "WHERE p_tunai IS NULL AND (metode IS NULL OR metode = 'TUNAI')"

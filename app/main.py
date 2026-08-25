@@ -307,13 +307,21 @@ def riwayat_export(filter: str = "", dari: str = "", sampai: str = "", q: str = 
 
 
 @app.post("/transaksi/void/{trx_id}")
-def void_transaksi(trx_id: int, db: Session = Depends(get_db)):
+def void_transaksi(
+    trx_id: int,
+    void_reason: str = Form("Tanpa alasan"),
+    db: Session = Depends(get_db)
+):
     t = db.get(models.Transaksi, trx_id)
     if not t:
         raise HTTPException(404, "Transaksi tidak ditemukan")
     if t.void:
         return RedirectResponse("/riwayat", status_code=303)
     t.void = 1
+    t.void_reason = void_reason
+    t.void_time = datetime.now()
+    t.void_by = "Admin"
+
     for it in json.loads(t.items):
         p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
         if p:
