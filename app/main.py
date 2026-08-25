@@ -2204,6 +2204,7 @@ def struk_page(trx_id: int, request: Request, db: Session = Depends(get_db)):
             "ag": ag,
             "pl": pl,
             "teks": teks,
+            "wa_url": "/struk/" + str(trx_id) + "/wa",
             "wa_url": "/struk/" + str(t.id) + "/wa"
         }
     )

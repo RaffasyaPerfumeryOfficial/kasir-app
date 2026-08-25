@@ -49,6 +49,18 @@
 </p>
 <script>
 var WA_URL="{{ wa_url|safe }}";
-function kirimWAStruk(){window.open(WA_URL,'_blank');}
+
+function kirimWAStruk(){
+
+    var pesan = encodeURIComponent({{ teks|safe }});
+
+    var app = "whatsapp://send?text=" + pesan;
+
+    window.location.href = app;
+
+    setTimeout(function(){
+        window.open(WA_URL,'_blank');
+    },1500);
+}
 </script>
 {% endblock %}
