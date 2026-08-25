@@ -658,9 +658,6 @@ async def tutup_simpan(request: Request, db: Session = Depends(get_db)):
 
 
 
-@app.get("/tutup/preview")
-def tutup_preview(db: Session = Depends(get_db)):
-    return buat_ringkasan(db)
 
 
 
