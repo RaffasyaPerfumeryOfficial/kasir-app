@@ -3,17 +3,24 @@ from pathlib import Path
 p = Path("app/main.py")
 s = p.read_text(encoding="utf-8")
 
-awal = s.find('@app.get("/laporan/laba_rugi/excel")', s.find('@app.get("/laporan/laba_rugi/excel")') + 1)
+target = '@app.get("/laporan/laba_rugi/excel")'
 
-akhir = s.find('@app.get("/riwayat"', awal)
+pos1 = s.find(target)
 
-if awal == -1:
+if pos1 == -1:
+    raise Exception("fungsi pertama tidak ditemukan")
+
+pos2 = s.find(target, pos1 + 1)
+
+if pos2 == -1:
     raise Exception("fungsi kedua tidak ditemukan")
+
+akhir = s.find("@app.", pos2 + 10)
 
 if akhir == -1:
     raise Exception("batas fungsi berikutnya tidak ditemukan")
 
-s = s[:awal] + s[akhir:]
+s = s[:pos2] + s[akhir:]
 
 p.write_text(s, encoding="utf-8")
 
