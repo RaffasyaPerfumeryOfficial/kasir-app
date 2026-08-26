@@ -395,19 +395,37 @@ Pilih backup untuk download, restore, atau hapus.
 </td>
 
 <td>
-{% if "sebelum" in b.nama %}
-<span class="badge-restore">Sebelum Restore</span>
 
-{% elif "auto" in b.nama %}
-<span class="badge-auto">Otomatis</span>
+{% if b.jenis == "Otomatis" %}
 
-{% elif "kasir_" in b.nama %}
-<span class="badge-auto">Backup Harian</span>
+<span class="badge-auto">
+Otomatis
+</span>
+
+
+{% elif b.jenis == "Manual" %}
+
+<span class="badge-manual">
+Manual
+</span>
+
+
+{% elif b.jenis == "Restore" %}
+
+<span class="badge-restore">
+Restore Point
+</span>
+
 
 {% else %}
-<span class="badge-auto">Otomatis</span>
+
+<span class="badge-auto">
+Lainnya
+</span>
+
 
 {% endif %}
+
 </td>
 
 <td>
