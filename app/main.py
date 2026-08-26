@@ -407,11 +407,15 @@ def backup_manual():
     return RedirectResponse("/backup-restore", status_code=303)
 
 
-@app.post("/backup/restore/{nama}")
+@app.post("/backup/restore/{nama:path}")
 def backup_restore(nama: str):
 
     folder = Path("backup")
-    file_backup = folder / nama
+
+    file_backup = Path(nama)
+
+    if not file_backup.exists():
+        file_backup = Path("backup") / nama.replace("backup/","")
 
     if not file_backup.exists():
         raise HTTPException(404, "Backup tidak ditemukan")
@@ -426,6 +430,9 @@ def backup_restore(nama: str):
     shutil.copy2("kasir.db", sekarang)
 
     shutil.copy2(file_backup, "kasir.db")
+
+    # reset koneksi sqlite setelah restore
+    engine.dispose()
 
     return RedirectResponse(
         "/backup-restore",
@@ -913,6 +920,9 @@ def restore_backup(file: str = Form(...)):
     shutil.copy2("kasir.db", cadangan_lama)
 
     shutil.copy2(file, "kasir.db")
+
+    # refresh koneksi database setelah restore
+    engine.dispose()
 
     os.makedirs("backup/log_restore", exist_ok=True)
 
