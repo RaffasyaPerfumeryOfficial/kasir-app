@@ -890,6 +890,18 @@ def restore_backup(file: str = Form(...)):
             detail="File backup tidak ditemukan"
         )
 
+    if not file.endswith(".db"):
+        raise HTTPException(
+            status_code=400,
+            detail="File restore harus database .db"
+        )
+
+    if os.path.getsize(file) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="File backup kosong"
+        )
+
     os.makedirs("backup/sebelum_restore", exist_ok=True)
 
     cadangan_lama = (
@@ -924,11 +936,10 @@ def restore_backup(file: str = Form(...)):
             + "\\n"
         )
 
-    return {
-        "ok": True,
-        "pesan": "Database berhasil dipulihkan",
-        "sebelum_restore": cadangan_lama
-    }
+    return RedirectResponse(
+        "/backup-restore",
+        status_code=303
+    )
 
 
 
