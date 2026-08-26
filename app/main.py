@@ -1001,13 +1001,13 @@ def backup_restore(request: Request):
 
                     path = os.path.join(root,file)
 
-                    if "auto" in root:
+                    if "auto" in root or "auto" in file or file.startswith("kasir-auto"):
                         jenis = "Otomatis"
 
-                    elif "manual" in root:
+                    elif "manual" in root or "manual" in file:
                         jenis = "Manual"
 
-                    elif "restore" in root:
+                    elif "restore" in root or "restore" in file or "sebelum_restore" in file:
                         jenis = "Restore"
 
                     else:
