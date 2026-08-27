@@ -308,7 +308,14 @@ def login_masuk(request: Request, username: str = Form(...), password: str = For
         return templates.TemplateResponse(
             request, "login.html",
             {"pesan": "Terlalu banyak percobaan. Coba lagi " + str(sisa) + " menit lagi."})
-    if USERS.get(username) == password:
+    dbx = SessionLocal()
+
+    akun = dbx.query(models.User).filter_by(
+        username=username,
+        password=password
+    ).first()
+
+    if akun:
         info["n"] = 0
         info["lock"] = 0
         sid = secrets.token_hex(16)

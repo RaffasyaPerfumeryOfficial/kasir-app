@@ -79,6 +79,36 @@ class TutupKasir(Base):
 def migrate_db():
     insp = inspect(engine)
     tables = insp.get_table_names()
+
+    with engine.begin() as conn:
+        if "user" not in tables:
+            conn.execute(text("""
+                CREATE TABLE user (
+                    id INTEGER PRIMARY KEY,
+                    username VARCHAR UNIQUE,
+                    password VARCHAR,
+                    role VARCHAR,
+                    dibuat DATETIME
+                )
+            """))
+
+        cek = conn.execute(
+            text("SELECT COUNT(*) FROM user")
+        ).scalar()
+
+        if cek == 0:
+            conn.execute(
+                text("""
+                    INSERT INTO user
+                    (username,password,role)
+                    VALUES
+                    ('admin','1234','admin'),
+                    ('kasir','kasir123','kasir')
+                """)
+            )
+
+    insp = inspect(engine)
+    tables = insp.get_table_names()
     with engine.begin() as conn:
         if "produk" in tables:
             cols = [c["name"] for c in insp.get_columns("produk")]
@@ -122,6 +152,16 @@ def migrate_db():
                 "UPDATE transaksi SET p_tunai = 0, p_nontunai = total "
                 "WHERE p_nontunai IS NULL AND metode IS NOT NULL AND metode != 'TUNAI'"
             ))
+
+class User(Base):
+    __tablename__ = "user"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True)
+    password = Column(String)
+    role = Column(String, default="kasir")
+    dibuat = Column(DateTime, default=datetime.now)
+
 
 class Sesi(Base):
     __tablename__ = "sesi"
