@@ -343,6 +343,33 @@ def login_masuk(request: Request, username: str = Form(...), password: str = For
 
 
 
+
+def get_user_session(request: Request):
+    sid = request.cookies.get("session_id")
+
+    if not sid:
+        return None
+
+    dbx = SessionLocal()
+
+    sesi = dbx.query(models.Sesi).filter_by(
+        token=sid
+    ).first()
+
+    dbx.close()
+
+    return sesi
+
+
+def hanya_admin(request: Request):
+    sesi = get_user_session(request)
+
+    if not sesi:
+        return False
+
+    return sesi.role == "admin"
+
+
 @app.get("/logout")
 def logout(request: Request):
     sid = request.cookies.get("session_id")
