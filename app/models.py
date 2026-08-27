@@ -167,6 +167,9 @@ class Sesi(Base):
     __tablename__ = "sesi"
 
     token = Column(String, primary_key=True)
+    user_id = Column(Integer)
+    username = Column(String)
+    role = Column(String)
     dibuat = Column(DateTime, default=datetime.now)
 
 class PesanAI(Base):
