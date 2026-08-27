@@ -1,25 +1,17 @@
-# Virtual Environment
-.venv/
-venv/
+# patch sementara
+patch*.py
+*_backup_*.py
+*_before_fix*.html
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-
-# Database
+# database runtime
 *.db
 
-# Backup database
+# backup aplikasi
 backup/
 
-# Temporary patch files
-patch_*.py
+# python
+__pycache__/
+*.pyc
 
-# File eksperimen lama
-*_sebelum_*.py
-*_sebelum_*.html
-
-# OS
-Thumbs.db
-.DS_Store
+# virtual env
+.venv/

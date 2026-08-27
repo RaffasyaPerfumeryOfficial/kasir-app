@@ -7,7 +7,6 @@ import string
 from datetime import date, datetime, timedelta
 import os
 import shutil
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -26,180 +25,6 @@ Base.metadata.create_all(bind=engine)
 models.migrate_db()
 
 app = FastAPI(title="Aplikasi Kasir")
-
-# ================= BACKUP OTOMATIS DATABASE =================
-
-
-def catat_backup(aksi, file="", keterangan=""):
-
-    folder = "backup/log_backup"
-    os.makedirs(folder, exist_ok=True)
-
-    nama = datetime.now().strftime(
-        "backup_log_%Y%m%d.txt"
-    )
-
-    path = os.path.join(folder, nama)
-
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(
-            "\n"
-            "[" + datetime.now().strftime("%d/%m/%Y %H:%M") + "]\n"
-            "AKSI : " + aksi + "\n"
-            "FILE : " + str(file) + "\n"
-            "INFO : " + keterangan + "\n"
-            "-------------------------\n"
-        )
-
-
-
-
-@app.get("/backup-history")
-def backup_history(request: Request):
-
-    data = []
-
-    folders = [
-        "backup/log_backup",
-        "backup/log_restore"
-    ]
-
-    for folder in folders:
-
-        if os.path.exists(folder):
-
-            for nama in sorted(os.listdir(folder), reverse=True):
-
-                if nama.endswith(".txt"):
-
-                    path = os.path.join(folder, nama)
-
-                    with open(path, "r", encoding="utf-8") as f:
-                        isi = f.read()
-
-                blok = isi.replace("\\n", "\n").split("-------------------------")
-
-                if "RESTORE DATABASE" in isi:
-                    blok += isi.split("RESTORE DATABASE")
-
-                for b in blok:
-
-                    if "AKSI :" in b or "RESTORE DATABASE" in b:
-
-                        baris = b.strip().split("\n")
-
-                        if "RESTORE DATABASE" in b:
-
-                            waktu = ""
-                            file = ""
-
-                            for x in baris:
-
-                                if x.startswith("Waktu"):
-                                    waktu = x.replace("Waktu : ", "")
-
-                                elif x.startswith("Sumber"):
-                                    file = x.replace("Sumber : ", "")
-
-                            data.append({
-                                "waktu": waktu,
-                                "aksi": "RESTORE",
-                                "file": file,
-                                "info": "Database berhasil dipulihkan"
-                            })
-
-                            continue
-
-                        waktu = ""
-                        aksi = ""
-                        file = ""
-                        info = ""
-
-                        for x in baris:
-
-                            if x.startswith("["):
-                                waktu = x.replace("[","").replace("]","")
-
-                            elif x.startswith("AKSI"):
-                                aksi = x.replace("AKSI : ","")
-
-                            elif x.startswith("FILE"):
-                                file = x.replace("FILE : ","")
-
-                            elif x.startswith("INFO"):
-                                info = x.replace("INFO : ","")
-
-                        data.append({
-                            "waktu": waktu,
-                            "aksi": aksi,
-                            "file": file,
-                            "info": info
-                        })
-
-
-    return templates.TemplateResponse(
-        request=request,
-        name="backup_history.html",
-        context={
-            "data": data
-        }
-    )
-
-
-def backup_database(jenis="auto"):
-    db_file = "kasir.db"
-
-    folder = Path("backup") / jenis
-    folder.mkdir(parents=True, exist_ok=True)
-
-    if not Path(db_file).exists():
-        return
-
-
-    if jenis == "auto":
-
-        nama = "auto_" + datetime.now().strftime("%Y%m%d") + ".db"
-
-        tujuan = folder / nama
-
-        # hanya 1 backup otomatis per hari
-        if tujuan.exists():
-            return
-
-    else:
-
-        nama = jenis + "_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
-
-        tujuan = folder / nama
-
-
-    shutil.copy2(db_file, tujuan)
-
-    catat_backup(
-        "BACKUP",
-        str(tujuan),
-        "Backup database berhasil dibuat " + jenis
-    )
-
-
-    # maksimal 30 file tiap kategori
-    files = sorted(
-        folder.glob("*.db"),
-        key=lambda x: x.stat().st_mtime,
-        reverse=True
-    )
-
-
-    for f in files[30:]:
-        f.unlink()
-
-
-@app.on_event("startup")
-def auto_backup_database():
-    backup_database("auto")
-
-# ================= END BACKUP =================
-
 templates = Jinja2Templates(directory="templates")
 
 NAMA_TOKO = "MEKAR SARI"
@@ -352,21 +177,6 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         grafik.append({"label": d.strftime("%d/%m"), "total": total})
     max_total = max([g["total"] for g in grafik] + [1])
     month_start = today.replace(day=1)
-
-    omzet_bulan_ini = sum(
-        t.total for t in transaksi_list
-        if t.dibuat and t.dibuat.date() >= month_start
-    )
-
-    transaksi_bulan_ini = sum(
-        1 for t in transaksi_list
-        if t.dibuat and t.dibuat.date() >= month_start
-    )
-
-    stok_menipis = db.query(models.Produk).filter(
-        models.Produk.stok < 10
-    ).count()
-
     kat_map = {}
     for p in db.query(models.Produk).all():
         kat_map[p.nama] = p.kategori or ""
@@ -383,9 +193,6 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         {
             "omzet_hari_ini": omzet_hari_ini,
             "transaksi_hari_ini": transaksi_hari_ini,
-            "omzet_bulan_ini": omzet_bulan_ini,
-            "transaksi_bulan_ini": transaksi_bulan_ini,
-            "stok_menipis": stok_menipis,
             "jumlah_produk": db.query(models.Produk).count(),
             "tunai_total": tunai_total,
             "nontunai_total": nontunai_total,
@@ -500,21 +307,13 @@ def riwayat_export(filter: str = "", dari: str = "", sampai: str = "", q: str = 
 
 
 @app.post("/transaksi/void/{trx_id}")
-def void_transaksi(
-    trx_id: int,
-    void_reason: str = Form("Tanpa alasan"),
-    db: Session = Depends(get_db)
-):
+def void_transaksi(trx_id: int, db: Session = Depends(get_db)):
     t = db.get(models.Transaksi, trx_id)
     if not t:
         raise HTTPException(404, "Transaksi tidak ditemukan")
     if t.void:
         return RedirectResponse("/riwayat", status_code=303)
     t.void = 1
-    t.void_reason = void_reason
-    t.void_time = datetime.now()
-    t.void_by = "Admin"
-
     for it in json.loads(t.items):
         p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
         if p:
@@ -523,62 +322,6 @@ def void_transaksi(
     return RedirectResponse("/riwayat", status_code=303)
 
 
-
-
-
-@app.get("/backup/list")
-def backup_list():
-    folder = Path("backup")
-    folder.mkdir(exist_ok=True)
-
-    data = []
-
-    for f in sorted(folder.glob("kasir_*.db"), reverse=True):
-        data.append({
-            "nama": f.name,
-            "ukuran": round(f.stat().st_size / 1024, 1)
-        })
-
-    return data
-
-
-@app.post("/backup/manual")
-def backup_manual():
-    backup_database("manual")
-    return RedirectResponse("/backup-restore", status_code=303)
-
-
-@app.post("/backup/restore/{nama:path}")
-def backup_restore(nama: str):
-
-    folder = Path("backup")
-
-    file_backup = Path(nama)
-
-    if not file_backup.exists():
-        file_backup = Path("backup") / nama.replace("backup/","")
-
-    if not file_backup.exists():
-        raise HTTPException(404, "Backup tidak ditemukan")
-
-    # backup kondisi sekarang sebelum restore
-    sekarang = folder / (
-        "sebelum_restore_" +
-        datetime.now().strftime("%Y%m%d_%H%M%S") +
-        ".db"
-    )
-
-    shutil.copy2("kasir.db", sekarang)
-
-    shutil.copy2(file_backup, "kasir.db")
-
-    # reset koneksi sqlite setelah restore
-    engine.dispose()
-
-    return RedirectResponse(
-        "/backup-restore",
-        status_code=303
-    )
 
 @app.get("/manajemen")
 def manajemen_produk(request: Request, db: Session = Depends(get_db)):
@@ -705,41 +448,12 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
             status_code=400
         )
 
-    request_id = payload.get("request_id")
-
-    if request_id:
-        cek = db.query(models.Transaksi).filter(
-            models.Transaksi.request_id == request_id
-        ).first()
-
-        if cek:
-            return JSONResponse({
-                "ok": True,
-                "id": cek.id,
-                "duplicate": True
-            })
-
     t = models.Transaksi()
-    t.request_id = payload.get("request_id")
     t.items = json.dumps(rows)
     t.total = total
     t.total_diskon = dt + sum(r["diskon"] for r in rows)
     t.metode = payload.get("metode") or "TUNAI"
     t.bayar = float(payload.get("tunai") or 0)
-
-    # simpan pembagian pembayaran
-    if t.metode == "NON":
-        t.p_tunai = 0
-        t.p_nontunai = total
-
-    elif t.metode == "SPLIT" or "NON-TUNAI" in t.metode.upper():
-        t.p_tunai = float(payload.get("tunai") or 0)
-        t.p_nontunai = total - t.p_tunai
-
-    else:
-        t.p_tunai = total
-        t.p_nontunai = 0
-
     t.kembalian = float(payload.get("kembalian") or 0)
     t.poin_dipakai = poin
     t.kode_trx = "RP-MKRS/" + datetime.now().strftime("%d-%m-%Y") + "/" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
@@ -756,16 +470,11 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
                     poin=-poin
                 )
             )
-        if bibit_total > 0 and not poin:
+        if bibit_total > 0 and poin == 0:
             earn = int(bibit_total * 0.05)
             ag.poin = (ag.poin or 0) + earn
             db.add(models.PoinLog(anggota_id=ag.id, trx_id=t.id, poin=earn))
     try:
-        if ag:
-            t.poin_setelah = ag.poin or 0
-        else:
-            t.poin_setelah = 0
-
         db.commit()
 
     except Exception as e:
@@ -800,39 +509,8 @@ def laporan_harian(request: Request, db: Session = Depends(get_db)):
         rekap[key]["omzet"] += t.total
     laporan = sorted(rekap.values(), key=lambda x: x["key"], reverse=True)
     total_omzet = sum(t.total for t in transaksi_list)
-
-    hari_ini = date.today()
-
-    omzet_hari_ini = sum(
-        t.total for t in transaksi_list
-        if t.dibuat.date() == hari_ini
-    )
-
-    omzet_bulan_ini = sum(
-        t.total for t in transaksi_list
-        if t.dibuat.year == hari_ini.year
-        and t.dibuat.month == hari_ini.month
-    )
-
-    jumlah_transaksi = len(transaksi_list)
-
-    rata_rata = (
-        total_omzet / jumlah_transaksi
-        if jumlah_transaksi
-        else 0
-    )
-
     return templates.TemplateResponse(
-        request,
-        "laporan.html",
-        {
-            "laporan": laporan,
-            "total_omzet": total_omzet,
-            "omzet_hari_ini": omzet_hari_ini,
-            "omzet_bulan_ini": omzet_bulan_ini,
-            "jumlah_transaksi": jumlah_transaksi,
-            "rata_rata": rata_rata
-        }
+        request, "laporan.html", {"laporan": laporan, "total_omzet": total_omzet}
     )
 
 
@@ -1027,38 +705,78 @@ def backup_db():
 
 
 
-
 @app.post("/backup/create")
 def buat_backup_manual():
 
-    folder = Path("backup/manual")
+    sekarang = datetime.now()
 
-    folder.mkdir(
-        parents=True,
-        exist_ok=True
+    folder = os.path.join(
+        "backup",
+        str(sekarang.year),
+        str(sekarang.month).zfill(2)
     )
 
+    os.makedirs(folder, exist_ok=True)
 
-    nama = (
-        "manual_"
-        + datetime.now().strftime("%Y%m%d_%H%M%S")
+    nama_file = (
+        "kasir-"
+        + sekarang.strftime("%Y-%m-%d-%H%M%S")
         + ".db"
     )
 
-
-    tujuan = folder / nama
-
+    tujuan = os.path.join(folder, nama_file)
 
     shutil.copy2(
         "kasir.db",
         tujuan
     )
 
-
     return RedirectResponse(
         "/backup-restore",
         status_code=303
     )
+
+
+@app.get("/restore/list")
+def list_backup():
+
+    hasil = []
+
+    folder = "backup"
+
+    if os.path.exists(folder):
+
+        for root, dirs, files in os.walk(folder):
+
+            if "sebelum_restore" in root:
+                continue
+
+            if "log_restore" in root:
+                continue
+
+            for file in files:
+
+                if file.endswith(".db"):
+
+                    path = os.path.join(root, file)
+
+                    hasil.append({
+                        "file": path,
+                        "nama": file,
+                        "ukuran": f"{os.path.getsize(path)/1024:.1f} KB",
+                        "waktu": datetime.fromtimestamp(
+                            os.path.getmtime(path)
+                        ).strftime("%d/%m/%Y %H:%M")
+                    })
+
+
+    return {
+        "backup": sorted(
+            hasil,
+            key=lambda x:x["waktu"],
+            reverse=True
+        )
+    }
 
 
 @app.post("/restore")
@@ -1067,18 +785,6 @@ def restore_backup(file: str = Form(...)):
         raise HTTPException(
             status_code=404,
             detail="File backup tidak ditemukan"
-        )
-
-    if not file.endswith(".db"):
-        raise HTTPException(
-            status_code=400,
-            detail="File restore harus database .db"
-        )
-
-    if os.path.getsize(file) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="File backup kosong"
         )
 
     os.makedirs("backup/sebelum_restore", exist_ok=True)
@@ -1092,9 +798,6 @@ def restore_backup(file: str = Form(...)):
     shutil.copy2("kasir.db", cadangan_lama)
 
     shutil.copy2(file, "kasir.db")
-
-    # refresh koneksi database setelah restore
-    engine.dispose()
 
     os.makedirs("backup/log_restore", exist_ok=True)
 
@@ -1118,16 +821,11 @@ def restore_backup(file: str = Form(...)):
             + "\\n"
         )
 
-    catat_backup(
-        "RESTORE",
-        file,
-        "Database berhasil dipulihkan"
-    )
-
-    return RedirectResponse(
-        "/backup-restore",
-        status_code=303
-    )
+    return {
+        "ok": True,
+        "pesan": "Database berhasil dipulihkan",
+        "sebelum_restore": cadangan_lama
+    }
 
 
 
@@ -1161,67 +859,43 @@ def restore_history():
     )
 
 
-
 @app.get("/backup-restore")
 def backup_restore(request: Request):
-
     hasil = []
 
     folder = "backup"
 
     if os.path.exists(folder):
-
         for root, dirs, files in os.walk(folder):
 
+            if "sebelum_restore" in root:
+                continue
+
+            if "log_restore" in root:
+                continue
+
             for file in files:
-
                 if file.endswith(".db"):
+                    path = os.path.join(root, file)
 
-                    path = os.path.join(root,file)
-
-                    if "auto" in root or "auto" in file or file.startswith("kasir-auto"):
-                        jenis = "Otomatis"
-
-                    elif "manual" in root or "manual" in file:
-                        jenis = "Manual"
-
-                    elif "restore" in root or "restore" in file or "sebelum_restore" in file:
-                        jenis = "Restore"
-
-                    else:
-                        jenis = "Lainnya"
-
+                    ukuran = os.path.getsize(path)
 
                     hasil.append({
                         "file": path,
                         "nama": file,
-                        "jenis": jenis,
-                        "ukuran": str(round(os.path.getsize(path)/1024,1))+" KB",
+                        "ukuran": str(round(ukuran / 1024, 1)) + " KB",
                         "waktu": datetime.fromtimestamp(
                             os.path.getmtime(path)
                         ).strftime("%d/%m/%Y %H:%M")
                     })
 
-
     hasil = sorted(
         hasil,
-        key=lambda x:x["waktu"],
+        key=lambda x: x["waktu"],
         reverse=True
     )
 
-
-    total_auto = len(
-        [x for x in hasil if x["jenis"]=="Otomatis"]
-    )
-
-    total_manual = len(
-        [x for x in hasil if x["jenis"]=="Manual"]
-    )
-
-    total_restore = len(
-        [x for x in hasil if x["jenis"]=="Restore"]
-    )
-
+    total_backup = len(hasil)
 
     total_ukuran = sum(
         os.path.getsize(x["file"])
@@ -1229,27 +903,27 @@ def backup_restore(request: Request):
     )
 
     total_ukuran = str(
-        round(total_ukuran/1024,1)
-    )+" KB"
+        round(total_ukuran / 1024, 1)
+    ) + " KB"
 
+    backup_terakhir = (
+        hasil[0]["waktu"]
+        if hasil
+        else "-"
+    )
 
     return templates.TemplateResponse(
         request,
         "backup_restore.html",
         {
             "backup": hasil,
-
-            "total_auto": total_auto,
-
-            "total_manual": total_manual,
-
-            "total_restore": total_restore,
-
+            "total_backup": total_backup,
             "total_ukuran": total_ukuran,
-
+            "backup_terakhir": backup_terakhir,
             "restore_info": restore_history()
         }
     )
+
 
 
 @app.get("/backup/download")
@@ -1267,8 +941,7 @@ def download_backup(file: str):
 
 
 @app.post("/backup/delete")
-def delete_backup(file: str = Form(...)):
-    print("DELETE FILE:", file)
+def delete_backup(file: str):
 
     if not os.path.exists(file):
         raise HTTPException(
@@ -1296,52 +969,13 @@ def delete_backup(file: str = Form(...)):
         key=os.path.getmtime
     )
 
-    if os.path.abspath(file) == os.path.abspath(terbaru):
+    if file == terbaru:
         raise HTTPException(
             status_code=403,
             detail="Backup terbaru tidak boleh dihapus"
         )
 
     os.remove(file)
-
-    catat_backup(
-        "DELETE",
-        file,
-        "Backup dihapus manual"
-    )
-
-    return RedirectResponse(
-        "/backup-restore",
-        status_code=303
-    )
-
-
-
-@app.post("/backup/clean")
-def clean_backup():
-
-    semua = []
-
-    for root, dirs, files in os.walk("backup"):
-        for nama in files:
-            if nama.endswith(".db"):
-                path = os.path.join(root, nama)
-                semua.append(path)
-
-    if len(semua) <= 1:
-        return RedirectResponse(
-            "/backup-restore",
-            status_code=303
-        )
-
-    terbaru = max(
-        semua,
-        key=os.path.getmtime
-    )
-
-    for file in semua:
-        if file != terbaru:
-            os.remove(file)
 
     return RedirectResponse(
         "/backup-restore",
@@ -2597,7 +2231,7 @@ def struk_print(trx_id: int, request: Request, ulang: str = "", db: Session = De
     return templates.TemplateResponse(request, "struk_print.html", {
         "t": t, "items": raw, "ag": ag, "pl": pl,
         "ulang": bool(ulang), "now_str": now_str, "sub": sub,
-        "nontunai": any(x in (t.metode or "").upper() for x in ["NON", "QRIS", "GOPAY", "DANA", "TRANSFER", "EDC"])})
+        "nontunai": "NON" in (t.metode or "").upper()})
 
 
 
@@ -2772,11 +2406,31 @@ def riwayat_hari(request: Request, tanggal: str = "", db: Session = Depends(get_
 
 
 @app.get("/laporan-lengkap")
-def laporan_lengkap():
-    return RedirectResponse(
-        "/laporan",
-        status_code=303
-    )
+def laporan_lengkap(request: Request, start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+    from datetime import datetime
+    if not start_date or not end_date:
+        end_dt = date.today()
+        start_dt = end_dt.replace(day=1)
+    else:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    per = {}
+    for t in transaksi_valid(db):
+        d = t.dibuat.date()
+        if start_dt <= d <= end_dt:
+            r = per.setdefault(d, {"trx": 0, "omzet": 0.0})
+            r["trx"] += 1
+            r["omzet"] += t.total or 0
+    for m in db.query(models.RekapManual).all():
+        if start_dt <= m.tanggal <= end_dt:
+            r = per.setdefault(m.tanggal, {"trx": 0, "omzet": 0.0})
+            r["trx"] += m.trx or 0
+            r["omzet"] += m.omzet or 0
+    rows = sorted(per.items(), reverse=True)
+    total = sum(r["omzet"] for _, r in rows)
+    return templates.TemplateResponse(request, "laporan_lengkap.html", {
+        "rows": rows, "total": total,
+        "start_date": start_dt.isoformat(), "end_date": end_dt.isoformat()})
 
 
 @app.get("/laporan-lengkap/excel")
@@ -2903,18 +2557,64 @@ def rp0(x):
 def buat_teks_struk(db, t):
     L = []
 
-    L.append("MEKAR SARI")
-    L.append("Refill Perfumery")
+    L.append("          MEKAR SARI")
+    L.append("        Refill Perfumery")
+    L.append("")
+    L.append("Jl. Mekar Sari No.5, Bekasi Jaya,")
+    L.append("Kec. Bekasi Tim., Kota Bks,")
+    L.append("Jawa Barat 17112")
+    L.append("HP: 0821-1897-1096")
+    L.append("")
+    L.append("--------------------------------")
+
+    L.append("No   : " + (t.kode_trx or ("TRX-" + str(t.id))))
+    L.append("Waktu: " + t.dibuat.strftime("%d/%m/%Y %H:%M"))
+
+    L.append("--------------------------------")
+    L.append("")
+    L.append("DETAIL PEMBELIAN")
+    L.append("")
+
+    for it in json.loads(t.items):
+        L.append(it["nama"])
+        L.append(
+            "  " +
+            str(it["jumlah"]) +
+            " x " +
+            rp0(it.get("harga") or 0) +
+            " = " +
+            rp0((it.get("harga") or 0) * it["jumlah"])
+        )
+        L.append("")
+
+    L.append("--------------------------------")
+    L.append("TOTAL  : " + rp0(t.total or 0))
+    L.append("BAYAR  : " + rp0(t.bayar or 0))
+    L.append("KEMBALI: " + rp0(t.kembalian or 0))
+    L.append("Metode : " + (t.metode or "TUNAI"))
+    L.append("--------------------------------")
+
+    L.append("")
+    L.append("          TERIMA KASIH")
+    L.append("")
+    L.append("Simpan struk ini sebagai")
+    L.append("bukti pembayaran yang sah.")
+
+    return "\n".join(L)
+
+
+    L.append("?? *MEKAR SARI*")
+    L.append("*Refill Perfumery*")
     L.append("Jl. Mekar Sari No.5, Bekasi Jaya")
     L.append("Kota Bekasi")
-    L.append("HP: 0821-1897-1096")
-    L.append("--------------------------------")
+    L.append("")
 
     L.append("No : " + (t.kode_trx or ("TRX-" + str(t.id))))
     L.append("Waktu : " + t.dibuat.strftime("%d/%m/%Y %H:%M"))
-    L.append("--------------------------------")
+    L.append("")
 
-    L.append("DETAIL PEMBELIAN")
+    L.append("*Detail Pembelian*")
+    L.append("")
 
     for it in json.loads(t.items):
         L.append(it["nama"])
@@ -2925,40 +2625,22 @@ def buat_teks_struk(db, t):
             " = " +
             rp0((it.get("harga") or 0) * it["jumlah"])
         )
+        L.append("")
 
-    L.append("--------------------------------")
-    L.append("TOTAL : " + rp0(t.total or 0))
+    L.append("*TOTAL : " + rp0(t.total or 0) + "*")
+    L.append("Bayar : " + rp0(t.bayar or 0))
+    L.append("Kembali : " + rp0(t.kembalian or 0))
+    L.append("")
+    L.append("Metode : " + (t.metode or "TUNAI"))
 
-    if t.poin_dipakai:
-        L.append("POTONG POIN : -" + rp0(t.poin_dipakai))
-        L.append("BAYAR AKHIR : " + rp0((t.total or 0) - (t.poin_dipakai or 0)))
-
-    metode = (t.metode or "TUNAI")
-    metode = metode.replace("POIN + NON-TUNAI (", "")
-    metode = metode.replace(")", "")
-
-    L.append("METODE : " + metode)
-
-    if "TUNAI" in metode.upper():
-        L.append("BAYAR : " + rp0(t.bayar or 0))
-        L.append("KEMBALI : " + rp0(t.kembalian or 0))
-
-    pl = db.query(models.PoinLog).filter_by(trx_id=t.id).first()
-    if pl:
-        ag = db.get(models.Anggota, pl.anggota_id)
-        if ag:
-            L.append("")
-            if pl.poin < 0:
-                L.append("POIN DIPAKAI : " + rp0(abs(pl.poin)))
-            elif pl.poin > 0:
-                L.append("POIN TAMBAH : +" + format(int(pl.poin), ",").replace(",", "."))
-
-            L.append("SISA POIN : " + format(int(ag.poin or 0), ",").replace(",", "."))
-
-    L.append("--------------------------------")
-    L.append("TERIMA KASIH")
+    L.append("")
+    L.append("?? *TERIMA KASIH*")
+    L.append("")
     L.append("Simpan struk ini sebagai")
     L.append("bukti pembayaran yang sah.")
 
     return "\n".join(L)
+
+
+
 
