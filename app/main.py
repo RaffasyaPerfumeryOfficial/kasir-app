@@ -319,7 +319,12 @@ def login_masuk(request: Request, username: str = Form(...), password: str = For
         info["lock"] = 0
         sid = secrets.token_hex(16)
         dbx = SessionLocal()
-        dbx.add(models.Sesi(token=sid))
+        dbx.add(models.Sesi(
+            token=sid,
+            user_id=akun.id,
+            username=akun.username,
+            role=akun.role
+        ))
         dbx.commit()
         dbx.close()
         resp = RedirectResponse("/dashboard", status_code=303)
