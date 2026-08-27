@@ -1,0 +1,56 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Riwayat Backup
+{% endblock %}
+
+
+{% block content %}
+
+<h2>Riwayat Backup & Restore</h2>
+
+<div class="card">
+
+<table style="width:100%; border-collapse:collapse;">
+
+<tr>
+<th style="text-align:left;padding:10px;">Waktu</th>
+<th style="text-align:left;padding:10px;">Aksi</th>
+<th style="text-align:left;padding:10px;">File</th>
+<th style="text-align:left;padding:10px;">Info</th>
+</tr>
+
+
+{% for x in data %}
+
+<tr>
+
+<td style="padding:10px;">
+{{ x.waktu }}
+</td>
+
+
+<td style="padding:10px;">
+{{ x.aksi }}
+</td>
+
+
+<td style="padding:10px;">
+{{ x.file }}
+</td>
+
+
+<td style="padding:10px;">
+{{ x.info }}
+</td>
+
+</tr>
+
+{% endfor %}
+
+
+</table>
+
+</div>
+
+{% endblock %}

@@ -343,6 +343,15 @@ Backup otomatis:
 <div style="display:flex;gap:15px;flex-wrap:wrap">
 
 <div class="card" style="flex:1;min-width:180px">
+
+<form method="post" action="/backup/clean" style="margin-bottom:15px;">
+<button 
+class="action-btn delete"
+onclick="return confirm('Hapus semua backup lama? Backup terbaru tetap aman.')">
+Bersihkan Backup Lama
+</button>
+</form>
+
 <h3>Auto Backup</h3>
 <h2>{{ total_auto }}</h2>
 </div>

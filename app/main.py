@@ -29,6 +29,161 @@ app = FastAPI(title="Aplikasi Kasir")
 
 # ================= BACKUP OTOMATIS DATABASE =================
 
+
+def catat_backup(aksi, file="", keterangan=""):
+
+    folder = "backup/log_backup"
+    os.makedirs(folder, exist_ok=True)
+
+    nama = datetime.now().strftime(
+        "backup_log_%Y%m%d.txt"
+    )
+
+    path = os.path.join(folder, nama)
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(
+            "\n"
+            "[" + datetime.now().strftime("%d/%m/%Y %H:%M") + "]\n"
+            "AKSI : " + aksi + "\n"
+            "FILE : " + str(file) + "\n"
+            "INFO : " + keterangan + "\n"
+            "-------------------------\n"
+        )
+
+
+
+
+@app.get("/backup-history")
+def backup_history(request: Request):
+
+    data = []
+
+    folders = [
+        "backup/log_backup",
+        "backup/log_restore"
+    ]
+
+    for folder in folders:
+
+        if os.path.exists(folder):
+
+            for nama in sorted(os.listdir(folder), reverse=True):
+
+                if nama.endswith(".txt"):
+
+                    path = os.path.join(folder, nama)
+
+                    with open(path, "r", encoding="utf-8") as f:
+                        isi = f.read()
+
+                blok = isi.replace("\\n", "\n").split("-------------------------")
+
+                if "RESTORE DATABASE" in isi:
+                    blok += isi.split("RESTORE DATABASE")
+
+                for b in blok:
+
+                    if "AKSI :" in b or "RESTORE DATABASE" in b:
+
+                        baris = b.strip().split("\n")
+
+                        if "RESTORE DATABASE" in b:
+
+                            waktu = ""
+                            file = ""
+
+                            for x in baris:
+
+                                if x.startswith("Waktu"):
+                                    waktu = x.replace("Waktu : ", "")
+
+                                elif x.startswith("Sumber"):
+                                    file = x.replace("Sumber : ", "")
+
+                            data.append({
+                                "waktu": waktu,
+                                "aksi": "RESTORE",
+                                "file": file,
+                                "info": "Database berhasil dipulihkan"
+                            })
+
+                            continue
+
+                        waktu = ""
+                        aksi = ""
+                        file = ""
+                        info = ""
+
+                        for x in baris:
+
+                            if x.startswith("["):
+                                waktu = x.replace("[","").replace("]","")
+
+                            elif x.startswith("AKSI"):
+                                aksi = x.replace("AKSI : ","")
+
+                            elif x.startswith("FILE"):
+                                file = x.replace("FILE : ","")
+
+                            elif x.startswith("INFO"):
+                                info = x.replace("INFO : ","")
+
+                        data.append({
+                            "waktu": waktu,
+                            "aksi": aksi,
+                            "file": file,
+                            "info": info
+                        })
+
+
+
+    from datetime import datetime
+
+    for item in data:
+        try:
+            if len(item["waktu"]) > 10:
+                dt = datetime.strptime(
+                    item["waktu"].split(".")[0],
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                item["waktu"] = dt.strftime("%d/%m/%Y %H:%M")
+        except:
+            pass
+
+    data.sort(
+        key=lambda x: x["waktu"],
+        reverse=True
+    )
+
+
+    from datetime import datetime
+
+    for item in data:
+        try:
+            if len(item["waktu"]) > 10:
+                dt = datetime.strptime(
+                    item["waktu"].split(".")[0],
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                item["waktu"] = dt.strftime("%d/%m/%Y %H:%M")
+        except:
+            pass
+
+    data.sort(
+        key=lambda x: x["waktu"],
+        reverse=True
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="backup_history.html",
+        context={
+            "data": data
+        }
+    )
+
+
 def backup_database(jenis="auto"):
     db_file = "kasir.db"
 
@@ -57,6 +212,12 @@ def backup_database(jenis="auto"):
 
 
     shutil.copy2(db_file, tujuan)
+
+    catat_backup(
+        "BACKUP",
+        str(tujuan),
+        "Backup database berhasil dibuat " + jenis
+    )
 
 
     # maksimal 30 file tiap kategori
@@ -995,6 +1156,12 @@ def restore_backup(file: str = Form(...)):
             + "\\n"
         )
 
+    catat_backup(
+        "RESTORE",
+        file,
+        "Database berhasil dipulihkan"
+    )
+
     return RedirectResponse(
         "/backup-restore",
         status_code=303
@@ -1138,7 +1305,8 @@ def download_backup(file: str):
 
 
 @app.post("/backup/delete")
-def delete_backup(file: str):
+def delete_backup(file: str = Form(...)):
+    print("DELETE FILE:", file)
 
     if not os.path.exists(file):
         raise HTTPException(
@@ -1166,13 +1334,52 @@ def delete_backup(file: str):
         key=os.path.getmtime
     )
 
-    if file == terbaru:
+    if os.path.abspath(file) == os.path.abspath(terbaru):
         raise HTTPException(
             status_code=403,
             detail="Backup terbaru tidak boleh dihapus"
         )
 
     os.remove(file)
+
+    catat_backup(
+        "DELETE",
+        file,
+        "Backup dihapus manual"
+    )
+
+    return RedirectResponse(
+        "/backup-restore",
+        status_code=303
+    )
+
+
+
+@app.post("/backup/clean")
+def clean_backup():
+
+    semua = []
+
+    for root, dirs, files in os.walk("backup"):
+        for nama in files:
+            if nama.endswith(".db"):
+                path = os.path.join(root, nama)
+                semua.append(path)
+
+    if len(semua) <= 1:
+        return RedirectResponse(
+            "/backup-restore",
+            status_code=303
+        )
+
+    terbaru = max(
+        semua,
+        key=os.path.getmtime
+    )
+
+    for file in semua:
+        if file != terbaru:
+            os.remove(file)
 
     return RedirectResponse(
         "/backup-restore",
