@@ -245,7 +245,6 @@ NAMA_TOKO = "MEKAR SARI"
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates.env.globals["nama_toko"] = NAMA_TOKO
 
-USERS = {"admin": "1234", "kasir": "kasir123"}
 SESSIONS = set()
 
 
