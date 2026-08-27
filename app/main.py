@@ -229,6 +229,21 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         grafik.append({"label": d.strftime("%d/%m"), "total": total})
     max_total = max([g["total"] for g in grafik] + [1])
     month_start = today.replace(day=1)
+
+    omzet_bulan_ini = sum(
+        t.total for t in transaksi_list
+        if t.dibuat and t.dibuat.date() >= month_start
+    )
+
+    transaksi_bulan_ini = sum(
+        1 for t in transaksi_list
+        if t.dibuat and t.dibuat.date() >= month_start
+    )
+
+    stok_menipis = db.query(models.Produk).filter(
+        models.Produk.stok < 10
+    ).count()
+
     kat_map = {}
     for p in db.query(models.Produk).all():
         kat_map[p.nama] = p.kategori or ""
@@ -245,6 +260,9 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         {
             "omzet_hari_ini": omzet_hari_ini,
             "transaksi_hari_ini": transaksi_hari_ini,
+            "omzet_bulan_ini": omzet_bulan_ini,
+            "transaksi_bulan_ini": transaksi_bulan_ini,
+            "stok_menipis": stok_menipis,
             "jumlah_produk": db.query(models.Produk).count(),
             "tunai_total": tunai_total,
             "nontunai_total": nontunai_total,
@@ -659,8 +677,39 @@ def laporan_harian(request: Request, db: Session = Depends(get_db)):
         rekap[key]["omzet"] += t.total
     laporan = sorted(rekap.values(), key=lambda x: x["key"], reverse=True)
     total_omzet = sum(t.total for t in transaksi_list)
+
+    hari_ini = date.today()
+
+    omzet_hari_ini = sum(
+        t.total for t in transaksi_list
+        if t.dibuat.date() == hari_ini
+    )
+
+    omzet_bulan_ini = sum(
+        t.total for t in transaksi_list
+        if t.dibuat.year == hari_ini.year
+        and t.dibuat.month == hari_ini.month
+    )
+
+    jumlah_transaksi = len(transaksi_list)
+
+    rata_rata = (
+        total_omzet / jumlah_transaksi
+        if jumlah_transaksi
+        else 0
+    )
+
     return templates.TemplateResponse(
-        request, "laporan.html", {"laporan": laporan, "total_omzet": total_omzet}
+        request,
+        "laporan.html",
+        {
+            "laporan": laporan,
+            "total_omzet": total_omzet,
+            "omzet_hari_ini": omzet_hari_ini,
+            "omzet_bulan_ini": omzet_bulan_ini,
+            "jumlah_transaksi": jumlah_transaksi,
+            "rata_rata": rata_rata
+        }
     )
 
 
@@ -2554,31 +2603,11 @@ def riwayat_hari(request: Request, tanggal: str = "", db: Session = Depends(get_
 
 
 @app.get("/laporan-lengkap")
-def laporan_lengkap(request: Request, start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
-    from datetime import datetime
-    if not start_date or not end_date:
-        end_dt = date.today()
-        start_dt = end_dt.replace(day=1)
-    else:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
-    per = {}
-    for t in transaksi_valid(db):
-        d = t.dibuat.date()
-        if start_dt <= d <= end_dt:
-            r = per.setdefault(d, {"trx": 0, "omzet": 0.0})
-            r["trx"] += 1
-            r["omzet"] += t.total or 0
-    for m in db.query(models.RekapManual).all():
-        if start_dt <= m.tanggal <= end_dt:
-            r = per.setdefault(m.tanggal, {"trx": 0, "omzet": 0.0})
-            r["trx"] += m.trx or 0
-            r["omzet"] += m.omzet or 0
-    rows = sorted(per.items(), reverse=True)
-    total = sum(r["omzet"] for _, r in rows)
-    return templates.TemplateResponse(request, "laporan_lengkap.html", {
-        "rows": rows, "total": total,
-        "start_date": start_dt.isoformat(), "end_date": end_dt.isoformat()})
+def laporan_lengkap():
+    return RedirectResponse(
+        "/laporan",
+        status_code=303
+    )
 
 
 @app.get("/laporan-lengkap/excel")

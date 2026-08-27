@@ -1,6 +1,31 @@
 ﻿{% extends "base.html" %}
 {% block title %}Laporan{% endblock %}
+
 {% block content %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:20px">
+
+<div class="card">
+<h3 style="color:#64748b;font-size:14px">Omzet Hari Ini</h3>
+<h2>Rp {{ "%0.0f"|format(omzet_hari_ini) }}</h2>
+</div>
+
+<div class="card">
+<h3 style="color:#64748b;font-size:14px">Omzet Bulan Ini</h3>
+<h2>Rp {{ "%0.0f"|format(omzet_bulan_ini) }}</h2>
+</div>
+
+<div class="card">
+<h3 style="color:#64748b;font-size:14px">Total Transaksi</h3>
+<h2>{{ jumlah_transaksi }}</h2>
+</div>
+
+<div class="card">
+<h3 style="color:#64748b;font-size:14px">Rata-rata Nota</h3>
+<h2>Rp {{ "%0.0f"|format(rata_rata) }}</h2>
+</div>
+
+</div>
 <div class="topbar">
   <h2>Laporan Penjualan</h2>
   <a href="/laporan/export"><button type="button">Download Excel (semua)</button></a>
