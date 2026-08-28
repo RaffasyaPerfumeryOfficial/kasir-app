@@ -701,6 +701,20 @@ def manajemen_produk(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "manajemen.html", {"produk_list": produk_list})
 
 
+@app.get("/pembelian")
+def halaman_pembelian(request: Request, db: Session = Depends(get_db)):
+    pembelian = db.query(models.Pembelian).order_by(
+        models.Pembelian.id.desc()
+    ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "pembelian.html",
+        {"pembelian": pembelian}
+    )
+
+
+
 @app.post("/produk/simpan")
 def simpan_produk(
     nama: str = Form(...),
@@ -2486,6 +2500,8 @@ async def masuk_massal(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
     total = 0
     n = 0
+    kode_beli = "BELI-" + datetime.now().strftime("%d%m%y") + "-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+
     for row in data:
         nama = (row.get("nama") or "").strip()
         try:
@@ -2508,6 +2524,7 @@ async def masuk_massal(request: Request, db: Session = Depends(get_db)):
             nama=nama,
             jumlah=jumlah,
             jenis="MASUK",
+            kode_beli=kode_beli,
             keterangan=
             "BELI " + str(jumlah) +
             " pcs TOTAL Rp " + str(int(total_invoice)) +
@@ -2524,10 +2541,163 @@ async def masuk_massal(request: Request, db: Session = Depends(get_db)):
         elif hasattr(peng, "nama"):
             peng.nama = ket
         peng.jumlah = total
+        peng.kode_beli = kode_beli
         db.add(peng)
     db.commit()
     return {"ok": True, "total": total, "n": n}
 
+
+
+
+
+
+@app.get("/pembelian/{id}")
+def detail_pembelian(id: int, request: Request, db: Session = Depends(get_db)):
+    pembelian = db.get(models.Pembelian, id)
+
+    if not pembelian:
+        raise HTTPException(404, "Pembelian tidak ditemukan")
+
+    detail = db.query(models.PembelianDetail).filter_by(
+        pembelian_id=id
+    ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "detail_pembelian.html",
+        {
+            "pembelian": pembelian,
+            "detail": detail
+        }
+    )
+
+@app.post("/pembelian/draft")
+async def buat_pembelian_draft(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+
+    kode_beli = "BELI-" + datetime.now().strftime("%d%m%y") + "-" + "".join(
+        random.choices(string.ascii_uppercase + string.digits, k=4)
+    )
+
+    total = 0
+    detail = []
+
+    for row in data:
+        nama = (row.get("nama") or "").strip()
+
+        try:
+            jumlah = int(row.get("jumlah") or 0)
+            invoice = float(row.get("total") or 0)
+        except Exception:
+            continue
+
+        if not nama or jumlah <= 0:
+            continue
+
+        p = db.query(models.Produk).filter_by(nama=nama).first()
+
+        if not p:
+            continue
+
+        modal_baru = invoice / jumlah
+
+        detail.append({
+            "produk_id": p.id,
+            "nama": p.nama,
+            "jumlah": jumlah,
+            "invoice": invoice,
+            "lama": p.harga_modal or 0,
+            "baru": modal_baru
+        })
+
+        total += invoice
+
+    if not detail:
+        return {"ok": False, "pesan": "Tidak ada data"}
+
+    pembelian = models.Pembelian(
+        kode_beli=kode_beli,
+        total=total,
+        status="DRAFT"
+    )
+
+    db.add(pembelian)
+    db.flush()
+
+    for d in detail:
+        db.add(models.PembelianDetail(
+            pembelian_id=pembelian.id,
+            produk_id=d["produk_id"],
+            nama=d["nama"],
+            jumlah_ml=d["jumlah"],
+            total_invoice=d["invoice"],
+            harga_modal_lama=d["lama"],
+            harga_modal_baru=d["baru"]
+        ))
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "kode_beli": kode_beli,
+        "total": total,
+        "jumlah_produk": len(detail)
+    }
+
+
+
+
+@app.post("/pembelian/setujui/{id}")
+def setujui_pembelian(id: int, db: Session = Depends(get_db)):
+
+    pembelian = db.get(models.Pembelian, id)
+
+    if not pembelian:
+        raise HTTPException(404, "Pembelian tidak ditemukan")
+
+    if pembelian.status != "DRAFT":
+        return RedirectResponse(
+            "/pembelian",
+            status_code=303
+        )
+
+    detail = db.query(models.PembelianDetail).filter_by(
+        pembelian_id=id
+    ).all()
+
+    for d in detail:
+        produk = db.get(models.Produk, d.produk_id)
+
+        if produk:
+            stok_lama = produk.stok or 0
+
+            produk.stok += d.jumlah_ml
+            produk.harga_modal = d.harga_modal_baru
+
+            db.add(models.StokMasuk(
+                nama=produk.nama,
+                jumlah=d.jumlah_ml,
+                jenis="MASUK",
+                kode_beli=pembelian.kode_beli,
+                stok_lama=stok_lama,
+                stok_baru=produk.stok,
+                selisih=d.jumlah_ml,
+                keterangan="Pembelian " + pembelian.kode_beli
+            ))
+
+    db.add(models.Pengeluaran(
+        keterangan="Pembelian " + pembelian.kode_beli,
+        jumlah=pembelian.total
+    ))
+
+    pembelian.status = "SELESAI"
+
+    db.commit()
+
+    return RedirectResponse(
+        "/pembelian",
+        status_code=303
+    )
 
 @app.post("/stok/update_massal")
 async def update_stok_massal(request: Request, db: Session = Depends(get_db)):

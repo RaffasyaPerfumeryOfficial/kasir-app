@@ -58,6 +58,7 @@ class Pengeluaran(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     keterangan = Column(String)
+    kode_beli = Column(String, default="")
     jumlah = Column(Float, default=0.0)
     dibuat = Column(DateTime, default=datetime.now)
 
@@ -110,6 +111,34 @@ def migrate_db():
     insp = inspect(engine)
     tables = insp.get_table_names()
     with engine.begin() as conn:
+
+        if "pembelian" not in tables:
+            conn.execute(text("""
+                CREATE TABLE pembelian (
+                    id INTEGER PRIMARY KEY,
+                    kode_beli VARCHAR,
+                    no_invoice VARCHAR,
+                    supplier VARCHAR,
+                    total FLOAT,
+                    status VARCHAR,
+                    dibuat DATETIME
+                )
+            """))
+
+        if "pembelian_detail" not in tables:
+            conn.execute(text("""
+                CREATE TABLE pembelian_detail (
+                    id INTEGER PRIMARY KEY,
+                    pembelian_id INTEGER,
+                    produk_id INTEGER,
+                    nama VARCHAR,
+                    jumlah_ml INTEGER,
+                    total_invoice FLOAT,
+                    harga_modal_lama FLOAT,
+                    harga_modal_baru FLOAT
+                )
+            """))
+
         if "produk" in tables:
             cols = [c["name"] for c in insp.get_columns("produk")]
             if "kode" not in cols:
@@ -198,6 +227,19 @@ def migrate_db():
                     "ALTER TABLE stok_masuk ADD COLUMN selisih INTEGER"
                 ))
 
+            if "kode_beli" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE stok_masuk ADD COLUMN kode_beli VARCHAR"
+                ))
+
+        if "pengeluaran" in tables:
+            cols = [c["name"] for c in insp.get_columns("pengeluaran")]
+
+            if "kode_beli" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE pengeluaran ADD COLUMN kode_beli VARCHAR"
+                ))
+
 class User(Base):
     __tablename__ = "user"
 
@@ -232,6 +274,7 @@ class StokMasuk(Base):
     nama = Column(String)
     jumlah = Column(Integer, default=0)
     jenis = Column(String, default="MASUK")
+    kode_beli = Column(String, default="")
 
     stok_lama = Column(Integer, default=0)
     stok_baru = Column(Integer, default=0)
@@ -289,3 +332,28 @@ class Pemasukan(Base):
     keterangan = Column(String)
     jumlah = Column(Float, default=0.0)
     dibuat = Column(DateTime, default=datetime.now)
+
+
+class Pembelian(Base):
+    __tablename__ = "pembelian"
+
+    id = Column(Integer, primary_key=True)
+    kode_beli = Column(String, default="")
+    no_invoice = Column(String, default="")
+    supplier = Column(String, default="")
+    total = Column(Float, default=0)
+    status = Column(String, default="DRAFT")
+    dibuat = Column(DateTime, default=datetime.now)
+
+
+class PembelianDetail(Base):
+    __tablename__ = "pembelian_detail"
+
+    id = Column(Integer, primary_key=True)
+    pembelian_id = Column(Integer)
+    produk_id = Column(Integer)
+    nama = Column(String)
+    jumlah_ml = Column(Integer, default=0)
+    total_invoice = Column(Float, default=0)
+    harga_modal_lama = Column(Float, default=0)
+    harga_modal_baru = Column(Float, default=0)

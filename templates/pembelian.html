@@ -1,0 +1,40 @@
+
+{% extends "base.html" %}
+
+{% block title %}Pembelian{% endblock %}
+
+{% block content %}
+
+<div class="topbar">
+<h2>Riwayat Pembelian</h2>
+<span class="badge">{{ pembelian|length }} data</span>
+</div>
+
+<div class="card">
+
+<table style="width:100%;border-collapse:collapse">
+
+<tr>
+<th>Kode</th>
+<th>Total</th>
+<th>Status</th>
+<th>Aksi</th>
+</tr>
+
+{% for p in pembelian %}
+<tr>
+<td>{{ p.kode_beli }}</td>
+<td>Rp {{ "{:,.0f}".format(p.total) }}</td>
+<td>{{ p.status }}</td>
+<td>{{ p.dibuat }}</td>
+<td>
+<a href="/pembelian/{{ p.id }}">Detail</a>
+</td>
+</tr>
+{% endfor %}
+
+</table>
+
+</div>
+
+{% endblock %}

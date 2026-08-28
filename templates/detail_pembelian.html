@@ -1,0 +1,60 @@
+
+{% extends "base.html" %}
+{% block title %}Detail Pembelian{% endblock %}
+
+{% block content %}
+
+<div class="topbar">
+<h2>Detail Pembelian</h2>
+<span class="badge">{{ pembelian.kode_beli }}</span>
+</div>
+
+<div class="card">
+
+<p>
+<strong>Status:</strong> {{ pembelian.status }}
+</p>
+
+<p>
+<strong>Total:</strong>
+Rp {{ "{:,.0f}".format(pembelian.total) }}
+</p>
+
+<table style="width:100%;border-collapse:collapse">
+
+<tr>
+<th>Nama Produk</th>
+<th>Jumlah</th>
+<th>Total Invoice</th>
+<th>Modal Lama</th>
+<th>Modal Baru</th>
+</tr>
+
+{% for d in detail %}
+<tr>
+<td>{{ d.nama }}</td>
+<td>{{ d.jumlah_ml }}</td>
+<td>Rp {{ "{:,.0f}".format(d.total_invoice) }}</td>
+<td>Rp {{ "{:,.0f}".format(d.harga_modal_lama) }}</td>
+<td>Rp {{ "{:,.0f}".format(d.harga_modal_baru) }}</td>
+</tr>
+{% endfor %}
+
+</table>
+
+<br>
+
+{% if pembelian.status == "DRAFT" %}
+<form method="post" action="/pembelian/setujui/{{ pembelian.id }}" style="margin-top:15px">
+<button type="submit" style="background:#16a34a;color:white;padding:10px 18px;border:0;border-radius:8px">
+Setujui Pembelian
+</button>
+</form>
+{% endif %}
+
+
+<a href="/pembelian">Kembali</a>
+
+</div>
+
+{% endblock %}

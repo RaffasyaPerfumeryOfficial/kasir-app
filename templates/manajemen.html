@@ -27,9 +27,9 @@
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
     <button type="button" onclick="addRow()">+ Tambah Baris</button>
     <span style="margin-left:auto;font-size:15px">Total: <strong id="totalBeli">Rp 0</strong></span>
-    <button type="button" style="background:var(--success)" onclick="selesaiBeli()">Selesai</button>
+    <button type="button" style="background:var(--success)" onclick="selesaiBeli()">Simpan Draft</button>
   </div>
-  <p style="color:var(--muted);margin-top:8px;font-size:13px">Ketik nama (muncul saran otomatis) → jumlah → harga beli/pcs. Setelah "Selesai", total otomatis masuk ke PENGELUARAN hari ini.</p>
+  <p style="color:var(--muted);margin-top:8px;font-size:13px">Ketik nama (muncul saran otomatis) → jumlah → harga beli/pcs. Data disimpan sebagai DRAFT terlebih dahulu. Stok dan laporan belum berubah sampai dikonfirmasi.</p>
 
 </div>
 
@@ -226,16 +226,57 @@ document.getElementById('totalBeli').textContent='Rp '+t.toLocaleString('id-ID')
 }
 function selesaiBeli(){
 const rows=[];
+
 document.querySelectorAll('#rows > div').forEach(r=>{
-rows.push({nama:r.querySelector('.bn').value.trim(),jumlah:r.querySelector('.bj').value,total:r.querySelector('.bh').value});
+rows.push({
+nama:r.querySelector('.bn').value.trim(),
+jumlah:r.querySelector('.bj').value,
+total:r.querySelector('.bh').value
 });
-if(rows.length===0){alert('Tambahkan minimal satu baris.');return;}
-let t=0;rows.forEach(r=>{t+=(+r.total||0);});
-if(!confirm('Total Rp '+t.toLocaleString('id-ID')+' akan dicatat sebagai PENGELUARAN hari ini dan stok bertambah. Lanjutkan?'))return;
-fetch('/stok/masuk_massal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(rows)}).then(r=>r.json()).then(d=>{
-alert('Tercatat! '+d.n+' produk masuk. Pengeluaran hari ini + Rp '+d.total.toLocaleString('id-ID'));
+});
+
+if(rows.length===0){
+alert('Tambahkan minimal satu baris.');
+return;
+}
+
+let t=0;
+rows.forEach(r=>{
+t+=(+r.total||0);
+});
+
+if(!confirm(
+'Total Rp '+t.toLocaleString('id-ID')+
+' akan disimpan sebagai DRAFT pembelian. Stok belum berubah. Lanjutkan?'
+)) return;
+
+
+fetch('/pembelian/draft',{
+method:'POST',
+headers:{
+'Content-Type':'application/json'
+},
+body:JSON.stringify(rows)
+})
+.then(r=>r.json())
+.then(d=>{
+
+if(!d.ok){
+alert(d.pesan || 'Gagal membuat draft');
+return;
+}
+
+alert(
+'Draft pembelian berhasil dibuat.\nKode: '
++d.kode_beli+
+'\nJumlah produk: '
++d.jumlah_produk
+);
+
 window.location.reload();
+
 });
+
 }
 function formDataHarga(){
 const f=new FormData();
