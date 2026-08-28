@@ -10,9 +10,15 @@
 <div class="layout">
   <div class="sidebar">
     <h1>{{ nama_toko }}</h1>
-    <a href="/ai">Pesan AI</a><a href="/dashboard">Dashboard</a>
+{% if user_role == "admin" %}
+    <a href="/ai">Pesan AI</a>
+    <a href="/dashboard">Dashboard</a>
+{% endif %}
+
     <a href="/kasir">Kasir</a>
     <a href="/riwayat-hari">Riwayat</a>
+
+{% if user_role == "admin" %}
     <a href="/manajemen">Produk</a>
     <div>
       <a href="/laporan">Laporan Penjualan</a>
@@ -23,6 +29,7 @@
     <a href="/backup-restore">Backup & Restore</a>
     <a href="/backup-history">Riwayat Backup</a>
     <a href="/anggota">Anggota</a>
+{% endif %}
   <a href="/logout">Keluar</a>
   </div>
   <div class="main">

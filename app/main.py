@@ -238,12 +238,35 @@ def auto_backup_database():
 
 # ================= END BACKUP =================
 
+
 templates = Jinja2Templates(directory="templates")
+
 
 NAMA_TOKO = "MEKAR SARI"
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates.env.globals["nama_toko"] = NAMA_TOKO
+
+
+def user_context(request: Request):
+    role = "guest"
+
+    sid = request.cookies.get("session_id")
+
+    if sid:
+        dbx = SessionLocal()
+        sesi = dbx.query(models.Sesi).filter_by(token=sid).first()
+        dbx.close()
+
+        if sesi:
+            role = sesi.role
+
+    return {
+        "user_role": role
+    }
+
+
+templates.context_processors = [user_context]
 
 SESSIONS = set()
 
@@ -594,7 +617,23 @@ def void_transaksi(
     for it in json.loads(t.items):
         p = db.query(models.Produk).filter_by(nama=it["nama"]).first()
         if p:
-            p.stok = (p.stok or 0) + it["jumlah"]
+            jumlah = it["jumlah"]
+
+            db.add(models.StokMasuk(
+                nama=p.nama,
+                jumlah=jumlah,
+                jenis="VOID",
+                keterangan="VOID TRX " + (t.kode_trx or ("TRX-" + str(t.id)))
+            ))
+
+            p.stok = (p.stok or 0) + jumlah
+
+            db.add(models.StokMasuk(
+                nama=p.nama,
+                jumlah=jumlah,
+                jenis="MASUK",
+                keterangan="PENGEMBALIAN VOID " + (t.kode_trx or ("TRX-" + str(t.id)))
+            ))
     db.commit()
     return RedirectResponse("/riwayat", status_code=303)
 
@@ -2433,7 +2472,12 @@ def stok_masuk(produk_id: int, jumlah: int = Form(...), keterangan: str = Form("
     if not produk:
         raise HTTPException(404, "Produk tidak ditemukan")
     produk.stok = (produk.stok or 0) + jumlah
-    db.add(models.StokMasuk(nama=produk.nama, jumlah=jumlah, keterangan=keterangan))
+    db.add(models.StokMasuk(
+        nama=produk.nama,
+        jumlah=jumlah,
+        jenis="MASUK",
+        keterangan=keterangan
+    ))
     db.commit()
     return RedirectResponse("/produk/" + str(produk_id), status_code=303)
 
@@ -2446,7 +2490,8 @@ async def masuk_massal(request: Request, db: Session = Depends(get_db)):
         nama = (row.get("nama") or "").strip()
         try:
             jumlah = int(row.get("jumlah") or 0)
-            harga = float(row.get("harga") or 0)
+            total_invoice = float(row.get("total") or 0)
+            harga_modal = total_invoice / jumlah if jumlah > 0 else 0
         except Exception:
             continue
         if not nama or jumlah <= 0:
@@ -2455,8 +2500,21 @@ async def masuk_massal(request: Request, db: Session = Depends(get_db)):
         if not p:
             continue
         p.stok = (p.stok or 0) + jumlah
-        db.add(models.StokMasuk(nama=nama, jumlah=jumlah, keterangan="BELI " + str(jumlah) + " pcs @ Rp " + str(int(harga))))
-        total += jumlah * harga
+
+        # update harga modal saja, harga jual tetap
+        p.harga_modal = harga_modal
+
+        db.add(models.StokMasuk(
+            nama=nama,
+            jumlah=jumlah,
+            jenis="MASUK",
+            keterangan=
+            "BELI " + str(jumlah) +
+            " pcs TOTAL Rp " + str(int(total_invoice)) +
+            " MODAL/PCS Rp " + str(int(harga_modal))
+        ))
+
+        total += total_invoice
         n += 1
     if n > 0:
         ket = "Pembelian stok massal (" + str(n) + " produk)"
@@ -2469,6 +2527,51 @@ async def masuk_massal(request: Request, db: Session = Depends(get_db)):
         db.add(peng)
     db.commit()
     return {"ok": True, "total": total, "n": n}
+
+
+@app.post("/stok/update_massal")
+async def update_stok_massal(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+
+    n = 0
+    from datetime import datetime
+
+    for row in data:
+        try:
+            produk_id = int(row.get("id"))
+            stok_baru = int(row.get("stok"))
+        except Exception:
+            continue
+
+        produk = db.query(models.Produk).filter_by(id=produk_id).first()
+
+        if produk:
+            stok_lama = produk.stok or 0
+            selisih = stok_baru - stok_lama
+
+            if selisih != 0:
+                db.add(
+                    models.StokMasuk(
+                        nama=produk.nama,
+                        jumlah=selisih,
+                        jenis="KOREKSI STOK",
+                        stok_lama=stok_lama,
+                        stok_baru=stok_baru,
+                        selisih=selisih,
+                        keterangan="STOCK OPNAME " + datetime.now().strftime("%d/%m/%Y %H:%M")
+                    )
+                )
+
+            produk.stok = stok_baru
+            n += 1
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "n": n
+    }
+
 
 @app.post("/pengeluaran/cepat")
 async def pengeluaran_cepat(request: Request, db: Session = Depends(get_db)):

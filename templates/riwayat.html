@@ -39,7 +39,7 @@
       <td>{% if tr.void %}<span class="badge" style="background:#fee2e2;color:var(--danger)">VOID</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">SAH</span>{% endif %}</td>
       <td>
         <a href="/struk/{{ tr.id }}">Struk</a>
-        {% if not tr.void %}
+        {% if not tr.void and user_role == "admin" %}
         <form method="post" action="/transaksi/void/{{ tr.id }}" style="display:inline" onsubmit="return cekVoid(this)">
           <input type="hidden" name="void_reason">
           <button class="btn-danger" type="submit">Void</button>

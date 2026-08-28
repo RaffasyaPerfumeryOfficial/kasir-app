@@ -38,7 +38,15 @@
     {% for g in gerakan %}
     <tr>
       <td>{{ g.waktu.strftime("%d/%m/%Y %H:%M") }}</td>
-      <td>{% if g.jenis == 'KELUAR' %}<span class="badge" style="background:#fee2e2;color:var(--danger)">KELUAR</span>{% else %}<span class="badge" style="background:#dcfce7;color:var(--success)">MASUK</span>{% endif %}</td>
+      <td>
+        {% if g.jenis == 'KELUAR' %}
+          <span class="badge" style="background:#fee2e2;color:var(--danger)">KELUAR</span>
+        {% elif g.jenis == 'VOID' %}
+          <span class="badge" style="background:#ffedd5;color:#ea580c">VOID</span>
+        {% else %}
+          <span class="badge" style="background:#dcfce7;color:var(--success)">MASUK</span>
+        {% endif %}
+      </td>
       <td style="text-align:right">{{ g.jumlah }}</td>
       <td>{{ g.ket }}</td>
     </tr>

@@ -30,7 +30,56 @@
     <button type="button" style="background:var(--success)" onclick="selesaiBeli()">Selesai</button>
   </div>
   <p style="color:var(--muted);margin-top:8px;font-size:13px">Ketik nama (muncul saran otomatis) → jumlah → harga beli/pcs. Setelah "Selesai", total otomatis masuk ke PENGELUARAN hari ini.</p>
+
 </div>
+
+<div class="card" style="margin-bottom:20px;border-left:4px solid #f59e0b">
+  <h3>Ubah Stok Massal</h3>
+
+  <input id="cariStokMassal"
+         placeholder="Cari kode / nama / kategori..."
+         style="margin-top:10px;width:300px"
+         oninput="filterStokMassal()">
+
+  <div style="max-height:350px;overflow-y:auto;margin-top:10px">
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <th>Kode</th>
+        <th>Nama Barang</th>
+        <th>Kategori</th>
+        <th>Modal</th>
+        <th>Jual</th>
+        <th>Stok Sekarang</th>
+        <th>Stok Baru</th>
+      </tr>
+
+      {% for p in produk_list %}
+      <tr class="rowStokMassal"
+          data-cari="{{ (p.kode or '') ~ ' ' ~ p.nama ~ ' ' ~ (p.kategori or '') }}">
+        <td>{{ p.kode or '' }}</td>
+        <td>{{ p.nama }}</td>
+        <td>{{ p.kategori or '' }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(p.harga_modal or 0) }}</td>
+        <td style="text-align:right">{{ "%0.0f"|format(p.harga or 0) }}</td>
+        <td style="text-align:right">{{ p.stok }}</td>
+        <td>
+          <input 
+            class="stokBaru"
+            data-id="{{ p.id }}"
+            type="number"
+            style="width:90px;margin:0"
+            autocomplete="off">
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <button style="margin-top:12px" type="button" onclick="simpanStokMassal()">
+    Simpan Perubahan Stok
+  </button>
+</div>
+
 <div class="card" style="margin-bottom:20px;border-left:4px solid var(--danger)">
   <h3>Stok Menipis (&lt; 10)</h3>
   {% set rendah = produk_list|selectattr("stok", "lt", 10)|list %}
@@ -46,9 +95,15 @@
 </div>
 <div class="grid">
   <div class="card">
+    <input id="cariProduk" 
+    placeholder="Cari produk (nama / kode / kategori)... klik untuk hapus"
+    onclick="this.value=''"
+    onkeyup="filterProduk()"
+    style="margin-bottom:12px;width:100%">
+
     <div style="max-height:480px;overflow-y:auto">
-      <table style="width:100%;border-collapse:collapse">
-        <tr><th>Kode</th><th>Nama (klik untuk profil)</th><th>Kategori</th><th style="text-align:right">Modal</th><th style="text-align:right">Jual</th><th style="text-align:right">Stok</th><th>Aksi</th></tr>
+      <table id="tabelProduk" style="width:100%;border-collapse:collapse">
+        <tr><th>Kode</th><th style="cursor:pointer" onclick="sortNama()">Nama Barang ↑↓</th><th>Kategori</th><th style="text-align:right">Modal</th><th style="text-align:right">Jual</th><th style="text-align:right;cursor:pointer" onclick="sortStok()">Stok ↑↓</th><th>Aksi</th></tr>
         {% for p in produk_list %}
         <tr>
           <td>{{ p.kode or '' }}</td>
@@ -82,29 +137,100 @@
   </div>
 </div>
 <script>
+function filterProduk(){
+let q=document.getElementById("cariProduk").value.toLowerCase();
+
+let rows=[...document.querySelectorAll("#tabelProduk tr")].slice(1);
+
+rows.forEach(r=>{
+    r.style.display=r.innerText.toLowerCase().includes(q) ? "" : "none";
+});
+
+if(q===""){
+    rows.sort((a,b)=>{
+        return a.cells[1].innerText.localeCompare(b.cells[1].innerText);
+    });
+
+    rows.forEach(r=>document.getElementById("tabelProduk").appendChild(r));
+}
+}
+
+let namaAsc=false;
+
+function sortNama(){
+let table=document.getElementById("tabelProduk");
+let rows=[...table.rows].slice(1);
+
+namaAsc=!namaAsc;
+
+rows.sort((a,b)=>{
+    let na=a.cells[1].innerText.toLowerCase();
+    let nb=b.cells[1].innerText.toLowerCase();
+
+    return namaAsc 
+    ? na.localeCompare(nb)
+    : nb.localeCompare(na);
+});
+
+rows.forEach(r=>table.appendChild(r));
+}
+
+let stokAsc=false;
+
+function sortStok(){
+let table=document.getElementById("tabelProduk");
+let rows=[...table.rows].slice(1);
+
+stokAsc=!stokAsc;
+
+rows.sort((a,b)=>{
+    let sa=parseInt(a.cells[5].innerText)||0;
+    let sb=parseInt(b.cells[5].innerText)||0;
+    return stokAsc ? sa-sb : sb-sa;
+});
+
+rows.forEach(r=>table.appendChild(r));
+}
+
+
 function addRow(){
 const d=document.createElement('div');
 d.style.cssText='display:flex;gap:8px;margin-top:8px;flex-wrap:wrap';
 d.innerHTML='<input list="produkList" class="bn" placeholder="Nama produk (ketik untuk cari)" style="margin:0;flex:2;min-width:180px">'
 +'<input type="number" class="bj" placeholder="Jumlah" style="margin:0;width:90px" oninput="hitung()">'
-+'<input type="number" class="bh" placeholder="Harga beli/pcs" style="margin:0;width:130px" oninput="hitung()">'
++'<input type="number" class="bh" placeholder="Total invoice" style="margin:0;width:130px" oninput="hitung()">'
++'<span class="modalPerPcs" style="padding:8px;color:var(--muted);font-size:13px">Modal/pcs: Rp 0</span>'
 +'<button type="button" class="btn-danger" onclick="this.parentNode.remove();hitung()">X</button>';
 document.getElementById('rows').appendChild(d);
 }
 function hitung(){
 let t=0;
+
 document.querySelectorAll('#rows > div').forEach(r=>{
-t+=(+(r.querySelector('.bj').value||0))*(+(r.querySelector('.bh').value||0));
+
+let qty = +(r.querySelector('.bj').value||0);
+let invoice = +(r.querySelector('.bh').value||0);
+
+t += invoice;
+
+let modal = qty > 0 ? invoice / qty : 0;
+
+let info = r.querySelector('.modalPerPcs');
+if(info){
+info.textContent='Modal/pcs: Rp '+Math.round(modal).toLocaleString('id-ID');
+}
+
 });
+
 document.getElementById('totalBeli').textContent='Rp '+t.toLocaleString('id-ID');
 }
 function selesaiBeli(){
 const rows=[];
 document.querySelectorAll('#rows > div').forEach(r=>{
-rows.push({nama:r.querySelector('.bn').value.trim(),jumlah:r.querySelector('.bj').value,harga:r.querySelector('.bh').value});
+rows.push({nama:r.querySelector('.bn').value.trim(),jumlah:r.querySelector('.bj').value,total:r.querySelector('.bh').value});
 });
 if(rows.length===0){alert('Tambahkan minimal satu baris.');return;}
-let t=0;rows.forEach(r=>{t+=(+r.jumlah||0)*(+r.harga||0);});
+let t=0;rows.forEach(r=>{t+=(+r.total||0);});
 if(!confirm('Total Rp '+t.toLocaleString('id-ID')+' akan dicatat sebagai PENGELUARAN hari ini dan stok bertambah. Lanjutkan?'))return;
 fetch('/stok/masuk_massal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(rows)}).then(r=>r.json()).then(d=>{
 alert('Tercatat! '+d.n+' produk masuk. Pengeluaran hari ini + Rp '+d.total.toLocaleString('id-ID'));
@@ -135,5 +261,85 @@ alert('Berhasil! '+d.n+' produk diubah.');
 window.location.reload();
 });
 }
+
+
+// Navigasi input Ubah Stok Massal
+document.querySelectorAll('.stokBaru').forEach((el,index,list)=>{
+    el.addEventListener('keydown',function(e){
+
+        if(e.key === "Enter"){
+            e.preventDefault();
+
+            if(list[index+1]){
+                list[index+1].focus();
+            }
+        }
+
+        if(e.key === "Tab"){
+            setTimeout(()=>{
+                this.value = "";
+            },50);
+        }
+
+    });
+});
+
+function simpanStokMassal(){
+
+    const data=[];
+
+    document.querySelectorAll('.stokBaru').forEach(el=>{
+
+        if(el.value.trim() !== ""){
+
+            data.push({
+                id: el.dataset.id,
+                stok: el.value
+            });
+
+        }
+
+    });
+
+
+    if(data.length === 0){
+        alert("Tidak ada perubahan stok.");
+        return;
+    }
+
+
+    fetch('/stok/update_massal',{
+        method:'POST',
+        headers:{
+            'Content-Type':'application/json'
+        },
+        body:JSON.stringify(data)
+    })
+    .then(r=>r.json())
+    .then(d=>{
+
+        alert("Berhasil mengubah "+d.n+" produk");
+
+        window.location.reload();
+
+    });
+
+}
+
+
+function filterStokMassal(){
+    let q=document.getElementById('cariStokMassal').value.toLowerCase();
+
+    document.querySelectorAll('.rowStokMassal').forEach(r=>{
+        let text=r.dataset.cari.toLowerCase();
+
+        if(text.includes(q)){
+            r.style.display='';
+        }else{
+            r.style.display='none';
+        }
+    });
+}
+
 </script>
 {% endblock %}

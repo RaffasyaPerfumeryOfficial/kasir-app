@@ -118,6 +118,24 @@ def migrate_db():
                 conn.execute(text("ALTER TABLE produk ADD COLUMN kategori VARCHAR"))
             if "harga_modal" not in cols:
                 conn.execute(text("ALTER TABLE produk ADD COLUMN harga_modal FLOAT"))
+        if "sesi" in tables:
+            cols = [c["name"] for c in insp.get_columns("sesi")]
+
+            if "user_id" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE sesi ADD COLUMN user_id INTEGER"
+                ))
+
+            if "username" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE sesi ADD COLUMN username VARCHAR"
+                ))
+
+            if "role" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE sesi ADD COLUMN role VARCHAR"
+                ))
+
         if "transaksi" in tables:
             cols = [c["name"] for c in insp.get_columns("transaksi")]
             if "kode_trx" not in cols:
@@ -153,6 +171,33 @@ def migrate_db():
                 "WHERE p_nontunai IS NULL AND metode IS NOT NULL AND metode != 'TUNAI'"
             ))
 
+        if "stok_masuk" in tables:
+            cols = [c["name"] for c in insp.get_columns("stok_masuk")]
+
+            if "jenis" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE stok_masuk ADD COLUMN jenis VARCHAR"
+                ))
+
+            conn.execute(text(
+                "UPDATE stok_masuk SET jenis='MASUK' WHERE jenis IS NULL"
+            ))
+
+            if "stok_lama" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE stok_masuk ADD COLUMN stok_lama INTEGER"
+                ))
+
+            if "stok_baru" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE stok_masuk ADD COLUMN stok_baru INTEGER"
+                ))
+
+            if "selisih" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE stok_masuk ADD COLUMN selisih INTEGER"
+                ))
+
 class User(Base):
     __tablename__ = "user"
 
@@ -186,6 +231,12 @@ class StokMasuk(Base):
     id = Column(Integer, primary_key=True)
     nama = Column(String)
     jumlah = Column(Integer, default=0)
+    jenis = Column(String, default="MASUK")
+
+    stok_lama = Column(Integer, default=0)
+    stok_baru = Column(Integer, default=0)
+    selisih = Column(Integer, default=0)
+
     keterangan = Column(String)
     dibuat = Column(DateTime, default=datetime.now)
 
