@@ -4,6 +4,72 @@
 
 {% block content %}
 
+<script>
+
+
+function simpanDraft(){
+
+    let data=[];
+
+    {% for d in detail %}
+
+    data.push({
+        id: {{ d.id }},
+        jumlah: Number(document.getElementById("jumlah_{{ d.id }}").value),
+        total_invoice: Number(document.getElementById("total_{{ d.id }}").value)
+    });
+
+    {% endfor %}
+
+
+    return Promise.all(
+        data.map(x =>
+
+            fetch("/pembelian/update_detail/"+x.id,{
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json"
+                },
+                body:JSON.stringify({
+                    jumlah:x.jumlah,
+                    total_invoice:x.total_invoice
+                })
+            })
+
+        )
+    )
+    .then(()=>{
+        return true;
+    });
+
+}
+
+
+function hitungModal(id){
+
+    let jumlah = parseFloat(
+        document.getElementById("jumlah_"+id).value || 0
+    );
+
+    let total = parseFloat(
+        document.getElementById("total_"+id).value || 0
+    );
+
+    let modal = 0;
+
+    if(jumlah > 0){
+        modal = total / jumlah;
+    }
+
+    document.getElementById("modal_"+id).innerText =
+        "Rp " + Math.round(modal).toLocaleString("id-ID");
+
+}
+
+
+</script>
+
+
 <div class="topbar">
 <h2>Detail Pembelian</h2>
 <span class="badge">{{ pembelian.kode_beli }}</span>
@@ -33,10 +99,43 @@ Rp {{ "{:,.0f}".format(pembelian.total) }}
 {% for d in detail %}
 <tr>
 <td>{{ d.nama }}</td>
-<td>{{ d.jumlah_ml }}</td>
-<td>Rp {{ "{:,.0f}".format(d.total_invoice) }}</td>
-<td>Rp {{ "{:,.0f}".format(d.harga_modal_lama) }}</td>
-<td>Rp {{ "{:,.0f}".format(d.harga_modal_baru) }}</td>
+
+<td>
+{% if pembelian.status == "DRAFT" %}
+<input 
+id="jumlah_{{ d.id }}"
+type="number"
+value="{{ d.jumlah_ml }}"
+oninput="hitungModal({{ d.id }})"
+style="width:90px">
+{% else %}
+{{ d.jumlah_ml }}
+{% endif %}
+</td>
+
+<td>
+{% if pembelian.status == "DRAFT" %}
+<input 
+id="total_{{ d.id }}"
+type="number"
+value="{{ d.total_invoice }}"
+oninput="hitungModal({{ d.id }})"
+style="width:120px">
+{% else %}
+Rp {{ "{:,.0f}".format(d.total_invoice) }}
+{% endif %}
+</td>
+
+<td>
+Rp {{ "{:,.0f}".format(d.harga_modal_lama) }}
+</td>
+
+<td>
+<span id="modal_{{ d.id }}">
+Rp {{ "{:,.0f}".format(d.harga_modal_baru) }}
+</span>
+</td>
+
 </tr>
 {% endfor %}
 
@@ -45,8 +144,10 @@ Rp {{ "{:,.0f}".format(pembelian.total) }}
 <br>
 
 {% if pembelian.status == "DRAFT" %}
-<form method="post" action="/pembelian/setujui/{{ pembelian.id }}" style="margin-top:15px">
-<button type="submit" style="background:#16a34a;color:white;padding:10px 18px;border:0;border-radius:8px">
+<form method="post" action="/pembelian/setujui/{{ pembelian.id }}">
+<button 
+type="submit"
+style="background:#16a34a;color:white;padding:10px 18px;border:0;border-radius:8px;margin-top:15px">
 Setujui Pembelian
 </button>
 </form>
@@ -56,5 +157,31 @@ Setujui Pembelian
 <a href="/pembelian">Kembali</a>
 
 </div>
+
+
+<script>
+
+function hitungModal(id){
+
+    let jumlah = parseFloat(
+        document.getElementById("jumlah_"+id).value || 0
+    );
+
+    let total = parseFloat(
+        document.getElementById("total_"+id).value || 0
+    );
+
+    let modal = 0;
+
+    if(jumlah > 0){
+        modal = total / jumlah;
+    }
+
+    document.getElementById("modal_"+id).innerText =
+        "Rp " + Math.round(modal).toLocaleString("id-ID");
+
+}
+
+</script>
 
 {% endblock %}

@@ -466,6 +466,10 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         models.Produk.stok < 10
     ).count()
 
+    produk_stok_menipis = db.query(models.Produk).filter(
+        models.Produk.stok < 10
+    ).order_by(models.Produk.stok.asc()).all()
+
     kat_map = {}
     for p in db.query(models.Produk).all():
         kat_map[p.nama] = p.kategori or ""
@@ -485,6 +489,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "omzet_bulan_ini": omzet_bulan_ini,
             "transaksi_bulan_ini": transaksi_bulan_ini,
             "stok_menipis": stok_menipis,
+            "produk_stok_menipis": produk_stok_menipis,
             "jumlah_produk": db.query(models.Produk).count(),
             "tunai_total": tunai_total,
             "nontunai_total": nontunai_total,
@@ -502,7 +507,30 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 @app.get("/kasir")
 def halaman_kasir(request: Request, db: Session = Depends(get_db)):
     produk_list = db.query(models.Produk).all()
-    return templates.TemplateResponse(request, "kasir.html", {"produk_list": produk_list})
+
+    urutan_cepat = [
+        "Z - PRIME MOLI",
+        "TAS PLASTIK PERFUMERY KECIL",
+        "TAS PLASTIK PERFUMERY BESAR",
+        "PROMO FREE EQUATION"
+    ]
+
+    produk_cepat = []
+
+    for nama in urutan_cepat:
+        for p in produk_list:
+            if (p.nama or "").upper() == nama:
+                produk_cepat.append(p)
+                break
+
+    return templates.TemplateResponse(
+        request,
+        "kasir.html",
+        {
+            "produk_list": produk_list,
+            "produk_cepat": produk_cepat
+        }
+    )
 
 
 def filter_transaksi(semua, flt, dari, sampai, q):
@@ -798,8 +826,6 @@ def buat_transaksi(payload: dict = Body(...), db: Session = Depends(get_db)):
             return JSONResponse({"ok": False, "detail": "Produk tidak ditemukan"}, status_code=400)
         qty = float(it["jumlah"])
         if qty == int(qty): qty = int(qty)
-        if getattr(p, "stok", None) is not None and p.stok < qty:
-            return JSONResponse({"ok": False, "detail": "Stok kurang: " + p.nama}, status_code=400)
     for it in items_in:
         p = db.get(models.Produk, int(it["produk_id"]))
         qty = float(it["jumlah"])
@@ -2480,6 +2506,52 @@ def produk_detail(produk_id: int, request: Request, db: Session = Depends(get_db
     )
 
 
+@app.post("/dashboard/restock/{produk_id}")
+async def dashboard_restock(produk_id: int, request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+
+    jumlah = int(data.get("jumlah") or 0)
+    harga_modal = float(data.get("harga_modal") or 0)
+    keterangan = data.get("keterangan") or "Restock Dashboard"
+
+    produk = db.get(models.Produk, produk_id)
+
+    if not produk:
+        raise HTTPException(404, "Produk tidak ditemukan")
+
+    if jumlah <= 0:
+        return JSONResponse(
+            {"ok": False, "detail": "Jumlah harus lebih dari 0"},
+            status_code=400
+        )
+
+    stok_lama = produk.stok or 0
+
+    produk.stok = stok_lama + jumlah
+
+    if harga_modal > 0:
+        produk.harga_modal = harga_modal
+
+    db.add(models.StokMasuk(
+        nama=produk.nama,
+        jumlah=jumlah,
+        jenis="MASUK",
+        stok_lama=stok_lama,
+        stok_baru=produk.stok,
+        selisih=jumlah,
+        keterangan=keterangan
+    ))
+
+    db.add(models.Pengeluaran(
+        keterangan="Restock " + produk.nama,
+        jumlah=jumlah * harga_modal
+    ))
+
+    db.commit()
+
+    return {"ok": True}
+
+
 @app.post("/produk/{produk_id}/masuk")
 def stok_masuk(produk_id: int, jumlah: int = Form(...), keterangan: str = Form(""), db: Session = Depends(get_db)):
     produk = db.get(models.Produk, produk_id)
@@ -2645,6 +2717,46 @@ async def buat_pembelian_draft(request: Request, db: Session = Depends(get_db)):
     }
 
 
+
+
+
+@app.post("/pembelian/update_detail/{detail_id}")
+async def update_detail_pembelian(detail_id: int, request: Request, db: Session = Depends(get_db)):
+
+    data = await request.json()
+
+    detail = db.get(models.PembelianDetail, detail_id)
+
+    if not detail:
+        raise HTTPException(404, "Detail pembelian tidak ditemukan")
+
+    jumlah = int(data.get("jumlah") or 0)
+    total_invoice = float(data.get("total_invoice") or 0)
+
+    if jumlah <= 0:
+        return {"ok": False, "pesan": "Jumlah tidak valid"}
+
+    detail.jumlah_ml = jumlah
+    detail.total_invoice = total_invoice
+    detail.harga_modal_baru = total_invoice / jumlah
+
+    pembelian = db.get(models.Pembelian, detail.pembelian_id)
+
+    if pembelian:
+        semua = db.query(models.PembelianDetail).filter_by(
+            pembelian_id=pembelian.id
+        ).all()
+
+        pembelian.total = sum(
+            x.total_invoice or 0 for x in semua
+        )
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "modal_baru": detail.harga_modal_baru
+    }
 
 
 @app.post("/pembelian/setujui/{id}")

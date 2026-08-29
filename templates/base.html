@@ -10,29 +10,43 @@
 <div class="layout">
   <div class="sidebar">
     <h1>{{ nama_toko }}</h1>
+
 {% if user_role == "admin" %}
+    <small style="opacity:.7">ADMIN</small>
+
+    <hr>
+    <b style="font-size:12px;opacity:.7">OPERASIONAL</b>
     <a href="/ai">Pesan AI</a>
     <a href="/dashboard">Dashboard</a>
-{% endif %}
-
     <a href="/kasir">Kasir</a>
     <a href="/riwayat-hari">Riwayat</a>
 
-{% if user_role == "admin" %}
+    <hr>
+    <b style="font-size:12px;opacity:.7">PRODUK</b>
     <a href="/manajemen">Produk</a>
-
     <a href="/pembelian">Pembelian</a>
-    <div>
-      <a href="/laporan">Laporan Penjualan</a>
-    </div>
 
+    <hr>
+    <b style="font-size:12px;opacity:.7">LAPORAN</b>
+    <a href="/laporan">Laporan Penjualan</a>
     <a href="/labarugi">Laba Rugi</a>
+
+    <hr>
+    <b style="font-size:12px;opacity:.7">SISTEM</b>
     <a href="/tutup">Tutup Kasir</a>
     <a href="/backup-restore">Backup & Restore</a>
     <a href="/backup-history">Riwayat Backup</a>
     <a href="/anggota">Anggota</a>
+
+{% else %}
+    <small style="opacity:.7">KASIR</small>
+    <hr>
+    <a href="/kasir">Kasir</a>
+    <a href="/riwayat-hari">Riwayat</a>
 {% endif %}
-  <a href="/logout">Keluar</a>
+
+    <hr>
+    <a href="/logout">Keluar</a>
   </div>
   <div class="main">
     {% block content %}{% endblock %}

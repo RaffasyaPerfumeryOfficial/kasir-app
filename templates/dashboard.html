@@ -1,6 +1,162 @@
 ﻿{% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
+<div id="modalRestock" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100">
+  <div style="background:white;max-width:400px;margin:15vh auto;padding:20px;border-radius:12px">
+    <h3>Restock Produk</h3>
+
+    <p id="restockNama" style="font-weight:700"></p>
+
+    <label>Jumlah masuk</label>
+    <input id="restockJumlah" type="number" value="1" min="1">
+
+    <label style="display:block;margin-top:10px">Harga modal / unit</label>
+    <input id="restockHargaModal" type="number" value="0" min="0">
+
+    <label style="display:block;margin-top:10px">Keterangan</label>
+    <input id="restockKet" value="Restock Dashboard">
+
+    <div style="display:flex;gap:10px;margin-top:15px">
+      <button onclick="simpanRestock()" style="flex:1;background:#16a34a;color:white">
+        Simpan
+      </button>
+
+      <button onclick="tutupRestock()" style="flex:1;background:#64748b;color:white">
+        Batal
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let restockId = null;
+
+let restockList=[];
+
+function tambahRestock(id,nama){
+  let ada = restockList.find(x => x.id === id);
+
+  if(!ada){
+    restockList.push({
+      id:id,
+      nama:nama
+    });
+  }
+
+  renderRestock();
+}
+
+function renderRestock(){
+  let box=document.getElementById("listRestock");
+
+  if(restockList.length===0){
+    box.innerHTML="Belum ada produk dipilih.";
+    return;
+  }
+
+  box.innerHTML = restockList.map((x,i)=>{
+    return `
+    <div style="border-bottom:1px solid #ddd;padding:10px 0">
+      <b>${i+1}. ${x.nama}</b><br>
+
+      <label>Jumlah masuk</label>
+      <input id="qty_${x.id}" type="number" value="1" min="1">
+
+      <label>Total beli</label>
+      <input id="total_${x.id}" type="number" value="0" min="0">
+    </div>
+    `;
+  }).join("");
+}
+
+function simpanRestock(){
+  let jumlah=parseInt(document.getElementById("restockJumlah").value||0);
+  let harga_modal=parseFloat(document.getElementById("restockHargaModal").value||0);
+  let ket=document.getElementById("restockKet").value;
+
+  fetch("/dashboard/restock/"+restockId,{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      jumlah:jumlah,
+      harga_modal:harga_modal,
+      keterangan:ket
+    })
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok){
+      location.reload();
+    }
+  });
+}
+
+function buatDraftRestock(){
+
+  if(restockList.length===0){
+    alert("Belum ada produk dipilih");
+    return;
+  }
+
+  let data=[];
+
+  restockList.forEach(x=>{
+
+    let jumlah=parseInt(
+      document.getElementById("qty_"+x.id).value || 0
+    );
+
+    let total=parseFloat(
+      document.getElementById("total_"+x.id).value || 0
+    );
+
+    if(jumlah>0){
+      data.push({
+        nama:x.nama,
+        jumlah:jumlah,
+        total:total
+      });
+    }
+
+  });
+
+
+  if(data.length===0){
+    alert("Jumlah restock belum diisi");
+    return;
+  }
+
+
+  fetch("/pembelian/draft",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify(data)
+  })
+  .then(r=>r.json())
+  .then(d=>{
+
+    if(d.ok){
+
+      alert("Draft pembelian dibuat\nKode: "+d.kode_beli);
+
+      location.href="/pembelian";
+
+    }else{
+
+      alert(d.pesan || "Gagal membuat draft");
+
+    }
+
+  });
+
+}
+
+</script>
+
 <div class="topbar"><h2>Dashboard</h2><a href="/backup"><button type="button">Download Backup</button></a></div>
 <div class="stat">
   <div class="card"><h3>Omzet Hari Ini</h3><p>Rp {{ "%0.0f"|format(omzet_hari_ini) }}</p></div>
@@ -22,7 +178,47 @@
     {% if tipe == 'warning' %}⚠️{% elif tipe == 'success' %}✅{% else %}💡{% endif %} {{ teks }}
   </p>
   {% endfor %}
+
 </div>
+
+<div class="card" style="margin-top:20px;border-left:4px solid var(--danger)">
+  <h3 style="margin-bottom:12px">Produk Stok Menipis</h3>
+
+  {% if produk_stok_menipis %}
+    {% for p in produk_stok_menipis %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #e2e8f0">
+      <div>
+        <b>{{ p.nama }}</b><br>
+        <small>Stok: {{ p.stok }}</small>
+      </div>
+
+      <button type="button"
+      onclick="tambahRestock({{ p.id }}, '{{ p.nama }}')"
+      style="background:#16a34a;color:white;border:0;padding:8px 12px;border-radius:8px;font-weight:700">
+      Restock
+      </button>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p>Tidak ada stok menipis.</p>
+  {% endif %}
+</div>
+
+
+<div class="card" style="margin-top:20px;border-left:4px solid var(--success)">
+  <h3 style="margin-bottom:12px">Daftar Restock Dipilih</h3>
+
+  <div id="listRestock">
+    Belum ada produk dipilih.
+  </div>
+
+  <button 
+  onclick="buatDraftRestock()"
+  style="margin-top:12px;background:#16a34a;color:white;border:0;padding:10px 14px;border-radius:8px;font-weight:700">
+  Buat Draft Pembelian
+  </button>
+</div>
+
 <div class="grid" style="margin-top:20px">
   <div class="card">
     <h3 style="margin-bottom:12px">Grafik Omzet</h3>
