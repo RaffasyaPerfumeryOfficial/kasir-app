@@ -2811,6 +2811,61 @@ def setujui_pembelian(id: int, db: Session = Depends(get_db)):
         status_code=303
     )
 
+
+@app.post("/pembelian/void/{id}")
+def void_pembelian(id: int, db: Session = Depends(get_db)):
+
+    pembelian = db.get(models.Pembelian, id)
+
+    if not pembelian:
+        raise HTTPException(404, "Pembelian tidak ditemukan")
+
+    if pembelian.status != "SELESAI":
+        return RedirectResponse(
+            "/pembelian",
+            status_code=303
+        )
+
+    detail = db.query(models.PembelianDetail).filter_by(
+        pembelian_id=id
+    ).all()
+
+
+    for d in detail:
+
+        produk = db.get(models.Produk, d.produk_id)
+
+        if produk:
+
+            stok_lama = produk.stok or 0
+
+            produk.stok -= d.jumlah_ml
+
+            # kembalikan harga modal sebelum pembelian
+            produk.harga_modal = d.harga_modal_lama
+
+            db.add(models.StokMasuk(
+                nama=produk.nama,
+                jumlah=-d.jumlah_ml,
+                jenis="VOID PEMBELIAN",
+                kode_beli=pembelian.kode_beli,
+                stok_lama=stok_lama,
+                stok_baru=produk.stok,
+                selisih=-d.jumlah_ml,
+                keterangan="VOID Pembelian " + pembelian.kode_beli
+            ))
+
+
+    pembelian.status = "VOID"
+
+    db.commit()
+
+    return RedirectResponse(
+        "/pembelian",
+        status_code=303
+    )
+
+
 @app.post("/stok/update_massal")
 async def update_stok_massal(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
