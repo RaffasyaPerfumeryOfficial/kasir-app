@@ -23,6 +23,37 @@ from app.pembulatan import bulat_harga
 from app.db import Base, SessionLocal, engine, get_db
 
 Base.metadata.create_all(bind=engine)
+
+
+# MIGRASI PENGELUARAN
+from sqlalchemy import inspect, text
+
+with engine.connect() as conn:
+
+    insp = inspect(engine)
+
+    if "pengeluaran" in insp.get_table_names():
+
+        cols = [c["name"] for c in insp.get_columns("pengeluaran")]
+
+        if "jenis" not in cols:
+            conn.execute(
+                text("ALTER TABLE pengeluaran ADD COLUMN jenis VARCHAR")
+            )
+
+        if "status" not in cols:
+            conn.execute(
+                text("ALTER TABLE pengeluaran ADD COLUMN status VARCHAR")
+            )
+
+        conn.execute(
+            text(
+                "UPDATE pengeluaran SET status='AKTIF' WHERE status IS NULL"
+            )
+        )
+
+        conn.commit()
+
 models.migrate_db()
 
 app = FastAPI(title="Aplikasi Kasir")
@@ -1050,7 +1081,7 @@ def hitung_laba(db, start_dt, end_dt):
         r["disc"] += item_disc + dtot
         r["net"] += net_t
         r["hpp"] += hpp_t
-    for pg in db.query(models.Pengeluaran).all():
+    for pg in db.query(models.Pengeluaran).filter(models.Pengeluaran.status != 'VOID').all():
         if start_dt <= pg.dibuat.date() <= end_dt:
             r = rows.setdefault(pg.dibuat.date(), {"gross": 0.0, "disc": 0.0, "net": 0.0, "hpp": 0.0, "op": 0.0, "pmsk": 0.0, "trx": 0})
             r["op"] += pg.jumlah or 0
@@ -1633,7 +1664,7 @@ def jawab_ai(q, db):
     q = (q or "").lower()
     today = date.today()
     transaksi_list = transaksi_valid(db)
-    pengeluaran_list = db.query(models.Pengeluaran).all()
+    pengeluaran_list = db.query(models.Pengeluaran).filter(models.Pengeluaran.status != 'VOID').all()
     produk_list = db.query(models.Produk).all()
     bibit = [p for p in produk_list if (p.kategori or "") == "BIBIT"]
     nama_bibit = set(p.nama for p in bibit)
@@ -1753,7 +1784,7 @@ def jawab_ai2(q, db, ctx=""):
     ql = (q or "").lower()
     transaksi_list = transaksi_valid(db)
     produk_list = db.query(models.Produk).all()
-    pengeluaran_list = db.query(models.Pengeluaran).all()
+    pengeluaran_list = db.query(models.Pengeluaran).filter(models.Pengeluaran.status != 'VOID').all()
     terjual = {}
     for t in transaksi_list:
         for it in json.loads(t.items):
@@ -1945,7 +1976,7 @@ def jawab_ai2(q, db, ctx=""):
             tun = sum(split_tunai_non(t)[0] for t in trx)
             non = sum(split_tunai_non(t)[1] for t in trx)
             label = "hari ini" if off == 0 else ("kemarin" if off == 1 else ("kemarin lusa" if off == 2 else target.strftime("%d/%m/%Y")))
-            peng_list = [p for p in db.query(models.Pengeluaran).all() if p.dibuat and p.dibuat.date() == target]
+            peng_list = [p for p in db.query(models.Pengeluaran).filter(models.Pengeluaran.status != 'VOID').all() if p.dibuat and p.dibuat.date() == target]
             tot_peng = sum(p.jumlah or 0 for p in peng_list)
             tunai_bersih = tun - tot_peng
             out = ("Omzet sinkron " + label + " (" + target.strftime("%d/%m/%Y") + "):\nomzet : " + rp(tot) + "\nTUNAI : " + rp(tun) + "\nNON-TUNAI : " + rp(non))
@@ -2799,6 +2830,9 @@ def setujui_pembelian(id: int, db: Session = Depends(get_db)):
 
     db.add(models.Pengeluaran(
         keterangan="Pembelian " + pembelian.kode_beli,
+        kode_beli=pembelian.kode_beli,
+        jenis="PEMBELIAN",
+        status="AKTIF",
         jumlah=pembelian.total
     ))
 
@@ -2855,6 +2889,13 @@ def void_pembelian(id: int, db: Session = Depends(get_db)):
                 keterangan="VOID Pembelian " + pembelian.kode_beli
             ))
 
+
+    peng = db.query(models.Pengeluaran).filter_by(
+        kode_beli=pembelian.kode_beli
+    ).first()
+
+    if peng:
+        peng.status = "VOID"
 
     pembelian.status = "VOID"
 
@@ -2950,7 +2991,7 @@ def buat_ringkasan(db):
             a["qty"] += it["jumlah"]
     peng_list = []
     total_peng = 0.0
-    for pg in db.query(models.Pengeluaran).all():
+    for pg in db.query(models.Pengeluaran).filter(models.Pengeluaran.status != 'VOID').all():
         if pg.dibuat.date() == today:
             ket = pg.keterangan if hasattr(pg, "keterangan") else pg.nama
             peng_list.append((ket or "PENGELUARAN", pg.jumlah or 0))

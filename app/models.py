@@ -59,6 +59,8 @@ class Pengeluaran(Base):
     id = Column(Integer, primary_key=True, index=True)
     keterangan = Column(String)
     kode_beli = Column(String, default="")
+    jenis = Column(String, default="OPERASIONAL")
+    status = Column(String, default="AKTIF")
     jumlah = Column(Float, default=0.0)
     dibuat = Column(DateTime, default=datetime.now)
 
