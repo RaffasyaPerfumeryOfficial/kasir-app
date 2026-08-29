@@ -761,17 +761,175 @@ def manajemen_produk(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/pembelian")
-def halaman_pembelian(request: Request, db: Session = Depends(get_db)):
-    pembelian = db.query(models.Pembelian).order_by(
+def halaman_pembelian(
+    request: Request,
+    status: str = "",
+    db: Session = Depends(get_db)
+):
+
+    query = db.query(models.Pembelian)
+
+    if status:
+        query = query.filter(
+            models.Pembelian.status == status
+        )
+
+    pembelian = query.order_by(
         models.Pembelian.id.desc()
     ).all()
 
     return templates.TemplateResponse(
         request,
         "pembelian.html",
-        {"pembelian": pembelian}
+        {
+            "pembelian": pembelian,
+            "filter_status": status
+        }
     )
 
+
+
+
+@app.get("/laporan/pembelian")
+def laporan_pembelian(
+    request: Request,
+    dari: str = "",
+    sampai: str = "",
+    db: Session = Depends(get_db)
+):
+
+    if dari:
+        dari = datetime.strptime(dari, "%Y-%m-%d").date()
+    else:
+        dari = date.today().replace(day=1)
+
+    if sampai:
+        sampai = datetime.strptime(sampai, "%Y-%m-%d").date()
+    else:
+        sampai = date.today()
+
+    total, jumlah, data = hitung_pembelian(
+        dari,
+        sampai,
+        db
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "laporan_pembelian.html",
+        {
+            "total": total,
+            "jumlah": jumlah,
+            "data": data,
+            "dari": dari,
+            "sampai": sampai
+        }
+    )
+
+
+
+@app.get("/laporan/pembelian/excel")
+def export_laporan_pembelian_excel(
+    dari: str = "",
+    sampai: str = "",
+    db: Session = Depends(get_db)
+):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from io import BytesIO
+    from datetime import datetime
+    from fastapi.responses import StreamingResponse
+
+    if dari:
+        start_dt = datetime.strptime(dari, "%Y-%m-%d").date()
+    else:
+        start_dt = date.today().replace(day=1)
+
+    if sampai:
+        end_dt = datetime.strptime(sampai, "%Y-%m-%d").date()
+    else:
+        end_dt = date.today()
+
+    data = db.query(models.Pembelian).filter(
+        models.Pembelian.status == "SELESAI"
+    ).all()
+
+    data = [
+        p for p in data
+        if p.dibuat and start_dt <= p.dibuat.date() <= end_dt
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Pembelian"
+
+    ws["A1"] = "CABANG"
+    ws["B1"] = ": MEKAR SARI"
+
+    ws["A2"] = "LAPORAN"
+    ws["B2"] = ": PEMBELIAN"
+
+    ws["A3"] = "PERIODE"
+    ws["B3"] = ": " + start_dt.strftime("%d-%m-%Y") + " s/d " + end_dt.strftime("%d-%m-%Y")
+
+    ws["A5"] = "DETAIL PEMBELIAN"
+
+    header_row = 7
+
+    headers = [
+        "NO",
+        "KODE PEMBELIAN",
+        "TANGGAL",
+        "SUPPLIER",
+        "TOTAL",
+        "STATUS"
+    ]
+
+    for i, h in enumerate(headers, 1):
+        ws.cell(header_row, i, h)
+        ws.cell(header_row, i).font = Font(bold=True)
+
+    row = 8
+    total = 0
+
+    for no, p in enumerate(data, 1):
+
+        supplier = getattr(p, "supplier", "") or "-"
+
+        ws.cell(row, 1, no)
+        ws.cell(row, 2, p.kode_beli)
+        ws.cell(row, 3, p.dibuat.strftime("%d-%m-%Y %H:%M"))
+        ws.cell(row, 4, supplier)
+        ws.cell(row, 5, p.total or 0)
+        ws.cell(row, 6, p.status)
+
+        total += p.total or 0
+        row += 1
+
+    row += 1
+
+    ws.cell(row, 1, "TOTAL PEMBELIAN SELESAI")
+    ws.cell(row, 5, total)
+
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 25
+    ws.column_dimensions["C"].width = 22
+    ws.column_dimensions["D"].width = 25
+    ws.column_dimensions["E"].width = 15
+    ws.column_dimensions["F"].width = 15
+
+    file = BytesIO()
+    wb.save(file)
+    file.seek(0)
+
+    return StreamingResponse(
+        file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=laporan-pembelian.xlsx"
+        }
+    )
 
 
 @app.post("/produk/simpan")
@@ -1023,42 +1181,121 @@ def laporan_harian(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/laporan/export")
-def export_laporan(dari: str = "", sampai: str = "", db: Session = Depends(get_db)):
-    transaksi_list = sorted(transaksi_valid(db), key=lambda t: t.id)
-    dari_d = parse_date(dari)
-    sampai_d = parse_date(sampai)
-    lines = ["ID;Kode;Tanggal;Jam;Metode;Items;Total;Diskon;Bayar;Kembalian"]
-    for t in transaksi_list:
-        d = t.dibuat.date()
-        if dari_d and d < dari_d:
-            continue
-        if sampai_d and d > sampai_d:
-            continue
-        items = json.loads(t.items)
-        items_str = ", ".join(str(i["nama"]) + " x" + str(i["jumlah"]) for i in items)
-        lines.append(
-            ";".join(
-                [
-                    str(t.id),
-                    t.kode_trx or "",
-                    t.dibuat.strftime("%d/%m/%Y"),
-                    t.dibuat.strftime("%H:%M"),
-                    t.metode or "TUNAI",
-                    items_str,
-                    str(int(t.total)),
-                    str(int(t.total_diskon or 0)),
-                    str(int(t.bayar)),
-                    str(int(t.kembalian)),
-                ]
-            )
-        )
-    content = "\ufeff" + "\n".join(lines)
-    return Response(
-        content=content,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=laporan-kasir.csv"},
+
+def export_laporan(
+    dari: str = "",
+    sampai: str = "",
+    db: Session = Depends(get_db)
+):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from io import BytesIO
+    from datetime import datetime
+    from fastapi.responses import StreamingResponse
+
+    if dari:
+        start_dt = datetime.strptime(dari, "%Y-%m-%d").date()
+    else:
+        start_dt = date.today().replace(day=1)
+
+    if sampai:
+        end_dt = datetime.strptime(sampai, "%Y-%m-%d").date()
+    else:
+        end_dt = date.today()
+
+
+    data = [
+        t for t in transaksi_valid(db)
+        if start_dt <= t.dibuat.date() <= end_dt
+    ]
+
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Penjualan"
+
+
+    # IDENTITAS
+    ws["A1"] = "CABANG"
+    ws["B1"] = ": MEKAR SARI"
+
+    ws["A2"] = "LAPORAN"
+    ws["B2"] = ": PENJUALAN"
+
+    ws["A3"] = "PERIODE"
+    ws["B3"] = (
+        ": "
+        + start_dt.strftime("%d-%m-%Y")
+        + " s/d "
+        + end_dt.strftime("%d-%m-%Y")
     )
 
+
+    ws["A5"] = "DETAIL PENJUALAN"
+
+
+    row = 7
+
+    header = [
+        "NO",
+        "KODE TRANSAKSI",
+        "TANGGAL",
+        "METODE",
+        "TOTAL",
+        "STATUS"
+    ]
+
+
+    for i, h in enumerate(header, 1):
+        ws.cell(row, i, h)
+        ws.cell(row, i).font = Font(bold=True)
+
+
+    row += 1
+    total = 0
+
+
+    for no, t in enumerate(data, 1):
+
+        ws.cell(row,1,no)
+        ws.cell(row,2,t.kode_trx)
+        ws.cell(row,3,t.dibuat.strftime("%d-%m-%Y %H:%M"))
+        ws.cell(row,4,t.metode or "TUNAI")
+        ws.cell(row,5,t.total or 0)
+        ws.cell(row,6,t.status)
+
+        total += t.total or 0
+
+        row += 1
+
+
+    row += 1
+
+    ws.cell(row,1,"TOTAL PENJUALAN")
+    ws.cell(row,5,total)
+
+
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 25
+    ws.column_dimensions["C"].width = 22
+    ws.column_dimensions["D"].width = 15
+    ws.column_dimensions["E"].width = 15
+    ws.column_dimensions["F"].width = 15
+
+
+    file = BytesIO()
+    wb.save(file)
+    file.seek(0)
+
+
+    return StreamingResponse(
+        file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=laporan-penjualan.xlsx"
+        }
+    )
 
 
 def hitung_laba(db, start_dt, end_dt):
@@ -1615,6 +1852,27 @@ def buat_saran(db):
         saran.append(("success", "Semua indikator bagus. Pertahankan!"))
     return saran
 
+
+def hitung_pembelian(d1, d2, db):
+
+    data = db.query(models.Pembelian).filter(
+        models.Pembelian.status == "SELESAI"
+    ).all()
+
+    total = 0
+    jumlah = 0
+
+    for p in data:
+        if p.dibuat:
+            tanggal = p.dibuat.date()
+
+            if d1 <= tanggal <= d2:
+                total += p.total or 0
+                jumlah += 1
+
+    return total, jumlah, data
+
+
 def hitung_range(d1, d2, transaksi_list, pengeluaran_list):
     omzet = 0.0
     modal = 0.0
@@ -1654,6 +1912,121 @@ def hitung_laba_ai(d1, d2, transaksi_list, pengeluaran_list, produk_list):
     laba = omzet - modal - keluar
     margin = (laba / omzet * 100) if omzet else 0.0
     return omzet, modal, keluar, laba, margin
+
+
+
+
+
+def style_excel_laporan(ws, judul, periode=""):
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    ws.merge_cells("A1:D1")
+    ws["A1"] = "MEKAR SARI"
+    ws["A1"].font = Font(bold=True, size=16)
+    ws["A1"].alignment = Alignment(horizontal="center")
+
+    ws.merge_cells("A2:D2")
+    ws["A2"] = judul
+    ws["A2"].font = Font(bold=True, size=14)
+    ws["A2"].alignment = Alignment(horizontal="center")
+
+    ws.merge_cells("A3:D3")
+    ws["A3"] = "Periode : " + periode
+    ws["A3"].alignment = Alignment(horizontal="center")
+
+
+    # header tabel
+    for cell in ws[4]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center")
+
+
+    garis = Side(border_style="thin")
+
+    for row in ws.iter_rows(min_row=4):
+        for cell in row:
+            cell.border = Border(
+                left=garis,
+                right=garis,
+                top=garis,
+                bottom=garis
+            )
+
+
+    # lebar kolom aman
+    ukuran = {
+        "A":25,
+        "B":22,
+        "C":18,
+        "D":15
+    }
+
+    for kolom, lebar in ukuran.items():
+        ws.column_dimensions[kolom].width = lebar
+
+
+    # format rupiah kolom total
+    for cell in ws["C"]:
+        if isinstance(cell.value,(int,float)):
+            cell.number_format = '"Rp" #,##0'
+
+
+    ws.freeze_panes = "A5"
+
+
+
+    from openpyxl.styles import PatternFill
+
+    # format header tabel
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.row == 6 and cell.value:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(
+                    "solid",
+                    fgColor="D9EAF7"
+                )
+                cell.alignment = Alignment(
+                    horizontal="center"
+                )
+
+    # tebalkan total akhir
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and "TOTAL" in cell.value:
+                cell.font = Font(bold=True)
+
+    from openpyxl.styles import PatternFill
+
+    # ukuran kolom profesional
+    ws.column_dimensions["A"].width = 25
+    ws.column_dimensions["B"].width = 22
+    ws.column_dimensions["C"].width = 15
+    ws.column_dimensions["D"].width = 15
+
+    # header tabel
+    for cell in ws[6]:
+        if cell.value:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(
+                fill_type="solid",
+                fgColor="D9EAF7"
+            )
+            cell.alignment = Alignment(
+                horizontal="center"
+            )
+
+    # total akhir
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and "TOTAL" in cell.value:
+                cell.font = Font(bold=True)
+
+    ws.freeze_panes = "A6"
+
+
+def format_rupiah_excel(cell):
+    cell.number_format = '"Rp" #,##0'
 
 
 def rp(x):
@@ -3159,146 +3532,249 @@ def struk_print(trx_id: int, request: Request, ulang: str = "", db: Session = De
 
 
 @app.get("/laporan/laba_rugi/excel")
-def download_laba_rugi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+
+def download_laba_rugi_excel(
+    start_date: str = "",
+    end_date: str = "",
+    db: Session = Depends(get_db)
+):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment
+    from openpyxl.styles import Font
     from io import BytesIO
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from fastapi.responses import StreamingResponse
-    if not start_date or not end_date:
-        today = datetime.now().date()
-        end_dt = today
-        start_dt = today - timedelta(days=29)
-    else:
+
+
+    if start_date:
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+    else:
+        start_dt = date.today().replace(day=1)
+
+
+    if end_date:
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
-    data = hitung_laba(db, start_dt, end_dt)
-    tot = data["tot"]
+    else:
+        end_dt = date.today()
+
+
+    hasil = hitung_laba(db, start_dt, end_dt)
+
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Laba Rugi"
-    ws["A1"] = "SALES COUNTER"
-    ws["B1"] = "RIVALDI RAMDANI"
-    ws["A2"] = "NO HP"
-    ws["B2"] = "0853-2034-2037"
-    ws["A3"] = "CAB"
-    ws["B3"] = "MEKAR SARI"
-    ws["A4"] = "PERIODE"
-    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
-    bold = Font(bold=True)
-    for r in range(1, 5):
-        ws.cell(row=r, column=1).font = bold
-    ws["A6"] = "LAPORAN LABA RUGI"
-    ws["A6"].font = Font(bold=True, size=14)
-    ws.merge_cells("A6:J6")
-    ws["A6"].alignment = Alignment(horizontal="center")
-    heads = ["No", "Tanggal", "Gross Sales", "Diskon", "Pendapatan", "Pemasukan", "Beban HPP", "Beban Operasional", "Laba Bersih", "Trx"]
-    for col, h in enumerate(heads, 1):
-        c = ws.cell(row=8, column=col, value=h)
-        c.font = bold
-        c.alignment = Alignment(horizontal="center")
-    row = 9
-    for i, (d, r) in enumerate(data["rows"], 1):
-        ws.cell(row=row, column=1, value=i)
-        ws.cell(row=row, column=2, value=d.strftime("%d/%m/%Y"))
-        ws.cell(row=row, column=3, value=r["gross"])
-        ws.cell(row=row, column=4, value=r["disc"])
-        ws.cell(row=row, column=5, value=r["net"])
-        ws.cell(row=row, column=6, value=r["pmsk"])
-        ws.cell(row=row, column=7, value=r["hpp"])
-        ws.cell(row=row, column=8, value=r["op"])
-        ws.cell(row=row, column=9, value=r["net"] - r["hpp"] - r["op"] + r["pmsk"])
-        ws.cell(row=row, column=10, value=r["trx"])
-        row += 1
+
+
+    # IDENTITAS
+    ws["A1"] = "CABANG"
+    ws["B1"] = ": MEKAR SARI"
+
+    ws["A2"] = "LAPORAN"
+    ws["B2"] = ": LABA RUGI"
+
+    ws["A3"] = "PERIODE"
+    ws["B3"] = (
+        ": "
+        + start_dt.strftime("%d-%m-%Y")
+        + " s/d "
+        + end_dt.strftime("%d-%m-%Y")
+    )
+
+
+    ws["A5"] = "DETAIL LABA RUGI"
+
+
+    row = 7
+
+    header = [
+        "TANGGAL",
+        "TRANSAKSI",
+        "OMZET",
+        "HPP",
+        "PENGELUARAN",
+        "LABA"
+    ]
+
+
+    for i,h in enumerate(header,1):
+        ws.cell(row,i,h)
+        ws.cell(row,i).font = Font(bold=True)
+
+
     row += 1
-    ws.cell(row=row, column=2, value="TOTAL").font = bold
-    ws.cell(row=row, column=3, value=tot["gross"]).font = bold
-    ws.cell(row=row, column=4, value=tot["disc"]).font = bold
-    ws.cell(row=row, column=5, value=tot["net"]).font = bold
-    ws.cell(row=row, column=6, value=tot["pmsk"]).font = bold
-    ws.cell(row=row, column=7, value=tot["hpp"]).font = bold
-    ws.cell(row=row, column=8, value=tot["op"]).font = bold
-    ws.cell(row=row, column=9, value=tot["net"] - tot["hpp"] - tot["op"] + tot["pmsk"]).font = bold
-    ws.cell(row=row, column=10, value=tot["trx"]).font = bold
-    out = BytesIO()
-    wb.save(out)
-    out.seek(0)
-    filename = "LabaRugi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
-    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + filename})
+
+    total_laba = 0
+
+
+    for tanggal, r in sorted(hasil.items()):
+
+        laba = (
+            r["net"]
+            - r["hpp"]
+            - r["op"]
+        )
+
+        ws.cell(row,1,str(tanggal))
+        ws.cell(row,2,r["trx"])
+        ws.cell(row,3,r["net"])
+        ws.cell(row,4,r["hpp"])
+        ws.cell(row,5,r["op"])
+        ws.cell(row,6,laba)
+
+        total_laba += laba
+
+        row += 1
+
+
+    row += 1
+
+    ws.cell(row,1,"TOTAL LABA")
+    ws.cell(row,6,total_laba)
+
+
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 15
+    ws.column_dimensions["C"].width = 15
+    ws.column_dimensions["D"].width = 15
+    ws.column_dimensions["E"].width = 18
+    ws.column_dimensions["F"].width = 15
+
+
+    file = BytesIO()
+    wb.save(file)
+    file.seek(0)
+
+
+    return StreamingResponse(
+        file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=laporan-laba-rugi.xlsx"
+        }
+    )
 
 
 
-@app.get("/transaksi/excel")
-def download_transaksi_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+def download_transaksi_excel(
+    start_date: str = "",
+    end_date: str = "",
+    db: Session = Depends(get_db)
+):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment
+    from openpyxl.styles import Font
     from io import BytesIO
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from fastapi.responses import StreamingResponse
-    if not start_date or not end_date:
-        today = datetime.now().date()
-        end_dt = today
-        start_dt = today - timedelta(days=29)
+
+
+    if start_date:
+        start_dt = datetime.strptime(start_date,"%Y-%m-%d").date()
     else:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
-    trx_list = [t for t in db.query(models.Transaksi).order_by(models.Transaksi.id).all() if start_dt <= t.dibuat.date() <= end_dt]
+        start_dt = date.today().replace(day=1)
+
+
+    if end_date:
+        end_dt = datetime.strptime(end_date,"%Y-%m-%d").date()
+    else:
+        end_dt = date.today()
+
+
+    data = [
+        t for t in transaksi_valid(db)
+        if start_dt <= t.dibuat.date() <= end_dt
+    ]
+
+
     wb = Workbook()
     ws = wb.active
-    ws.title = "Transaksi"
-    ws["A1"] = "SALES COUNTER"
-    ws["B1"] = "RIVALDI RAMDANI"
-    ws["A2"] = "NO HP"
-    ws["B2"] = "0853-2034-2037"
-    ws["A3"] = "CAB"
-    ws["B3"] = "MEKAR SARI"
-    ws["A4"] = "PERIODE"
-    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
-    bold = Font(bold=True)
-    for r in range(1, 5):
-        ws.cell(row=r, column=1).font = bold
-    ws["A6"] = "DAFTAR TRANSAKSI (PER STRUK)"
-    ws["A6"].font = Font(bold=True, size=14)
-    ws.merge_cells("A6:G6")
-    ws["A6"].alignment = Alignment(horizontal="center")
-    for col, h in enumerate(["No", "Waktu", "Kode Struk", "Metode", "Items", "Total (Rp)", "Status"], 1):
-        c = ws.cell(row=8, column=col, value=h)
-        c.font = bold
-        c.alignment = Alignment(horizontal="center")
-    row = 9
-    for i, t in enumerate(trx_list, 1):
-        items = "; ".join(it["nama"] + " x" + str(it["jumlah"]) for it in json.loads(t.items))
-        ws.cell(row=row, column=1, value=i)
-        ws.cell(row=row, column=2, value=t.dibuat.strftime("%d/%m/%Y %H:%M"))
-        ws.cell(row=row, column=3, value=t.kode_trx or ("TRX-" + str(t.id)))
-        ws.cell(row=row, column=4, value=t.metode or "TUNAI")
-        ws.cell(row=row, column=5, value=items)
-        ws.cell(row=row, column=6, value=t.total or 0)
-        ws.cell(row=row, column=7, value="VOID" if t.void else "SAH")
-        row += 1
+    ws.title = "Penjualan"
+
+
+    ws["A1"] = "CABANG"
+    ws["B1"] = ": MEKAR SARI"
+
+    ws["A2"] = "LAPORAN"
+    ws["B2"] = ": PENJUALAN"
+
+    ws["A3"] = "PERIODE"
+    ws["B3"] = (
+        ": "
+        + start_dt.strftime("%d-%m-%Y")
+        + " s/d "
+        + end_dt.strftime("%d-%m-%Y")
+    )
+
+
+    ws["A5"] = "DETAIL PENJUALAN"
+
+
+    row = 7
+
+    header = [
+        "NO",
+        "KODE TRANSAKSI",
+        "TANGGAL",
+        "METODE",
+        "TOTAL",
+        "DISKON",
+        "BAYAR",
+        "STATUS"
+    ]
+
+
+    for i,h in enumerate(header,1):
+        ws.cell(row,i,h)
+        ws.cell(row,i).font = Font(bold=True)
+
+
     row += 1
-    ws.cell(row=row, column=5, value="TOTAL").font = bold
-    ws.cell(row=row, column=6, value=sum(t.total or 0 for t in trx_list if not t.void)).font = bold
-    ws.column_dimensions["A"].width = 6
-    ws.column_dimensions["B"].width = 18
-    ws.column_dimensions["C"].width = 28
-    ws.column_dimensions["D"].width = 22
-    ws.column_dimensions["E"].width = 50
-    ws.column_dimensions["F"].width = 14
-    ws.column_dimensions["G"].width = 8
-    for r in ws.iter_rows(min_row=9, max_row=row, min_col=6, max_col=6):
-        for c in r:
-            if isinstance(c.value, (int, float)):
-                c.number_format = "#,##0"
-    out = BytesIO()
-    wb.save(out)
-    out.seek(0)
-    fn = "Transaksi_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
-    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+    total = 0
 
 
+    for no,t in enumerate(data,1):
 
-@app.get("/riwayat-hari")
+        ws.cell(row,1,no)
+        ws.cell(row,2,t.kode_trx or "")
+        ws.cell(row,3,t.dibuat.strftime("%d-%m-%Y %H:%M"))
+        ws.cell(row,4,t.metode or "TUNAI")
+        ws.cell(row,5,t.total or 0)
+        ws.cell(row,6,t.total_diskon or 0)
+        ws.cell(row,7,t.bayar or 0)
+        ws.cell(row,8,t.status or "")
+
+        total += t.total or 0
+
+        row += 1
+
+
+    row += 1
+
+    ws.cell(row,1,"TOTAL PENJUALAN SELESAI")
+    ws.cell(row,5,total)
+
+
+    for col in range(1,9):
+        ws.column_dimensions[
+            chr(64+col)
+        ].width = 18
+
+
+    file = BytesIO()
+    wb.save(file)
+    file.seek(0)
+
+
+    return StreamingResponse(
+        file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=laporan-penjualan.xlsx"
+        }
+    )
+
+
 def riwayat_hari(request: Request, tanggal: str = "", db: Session = Depends(get_db)):
     from datetime import datetime, timedelta
     today = date.today()
@@ -3337,64 +3813,149 @@ def laporan_lengkap():
 
 
 @app.get("/laporan-lengkap/excel")
-def laporan_lengkap_excel(start_date: str = "", end_date: str = "", db: Session = Depends(get_db)):
+
+def laporan_lengkap_excel(
+    start_date: str = "",
+    end_date: str = "",
+    db: Session = Depends(get_db)
+):
     from openpyxl import Workbook
     from openpyxl.styles import Font
     from io import BytesIO
     from datetime import datetime
     from fastapi.responses import StreamingResponse
-    if not start_date or not end_date:
-        end_dt = date.today()
-        start_dt = end_dt.replace(day=1)
+
+
+    if start_date:
+        start_dt = datetime.strptime(start_date,"%Y-%m-%d").date()
     else:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
-    per = {}
-    for t in transaksi_valid(db):
-        d = t.dibuat.date()
-        if start_dt <= d <= end_dt:
-            r = per.setdefault(d, {"trx": 0, "omzet": 0.0})
-            r["trx"] += 1
-            r["omzet"] += t.total or 0
-    for m in db.query(models.RekapManual).all():
-        if start_dt <= m.tanggal <= end_dt:
-            r = per.setdefault(m.tanggal, {"trx": 0, "omzet": 0.0})
-            r["trx"] += m.trx or 0
-            r["omzet"] += m.omzet or 0
-    rows = sorted(per.items())
+        start_dt = date.today().replace(day=1)
+
+
+    if end_date:
+        end_dt = datetime.strptime(end_date,"%Y-%m-%d").date()
+    else:
+        end_dt = date.today()
+
+
+    transaksi = [
+        t for t in transaksi_valid(db)
+        if start_dt <= t.dibuat.date() <= end_dt
+    ]
+
+
+    pembelian = [
+        p for p in db.query(models.Pembelian).all()
+        if p.dibuat and start_dt <= p.dibuat.date() <= end_dt
+        and p.status=="SELESAI"
+    ]
+
+
+    pengeluaran = [
+        p for p in db.query(models.Pengeluaran).all()
+        if p.dibuat and start_dt <= p.dibuat.date() <= end_dt
+        and p.status!="VOID"
+    ]
+
+
+    total_jual = sum(t.total or 0 for t in transaksi)
+    total_beli = sum(p.total or 0 for p in pembelian)
+    total_keluar = sum(p.jumlah or 0 for p in pengeluaran)
+
+
+    laba = total_jual - total_beli - total_keluar
+
+
     wb = Workbook()
     ws = wb.active
-    ws.title = "Laporan Penjualan"
-    ws["A1"] = "SALES COUNTER"; ws["B1"] = "RIVALDI RAMDANI"
-    ws["A2"] = "NO HP"; ws["B2"] = "0853-2034-2037"
-    ws["A3"] = "CAB"; ws["B3"] = "MEKAR SARI"
-    ws["A4"] = "PERIODE"
-    ws["B4"] = start_dt.strftime("%d-%B-%Y").upper() + " SAMPAI " + end_dt.strftime("%d-%B-%Y").upper()
-    bold = Font(bold=True)
-    for r in range(1, 5):
-        ws.cell(row=r, column=1).font = bold
-    ws["A6"] = "LAPORAN PENJUALAN"
-    ws["A6"].font = Font(bold=True, size=14)
-    for col, h in enumerate(["No", "Tanggal", "Jumlah Transaksi", "Omzet (Rp)"], 1):
-        c = ws.cell(row=8, column=col, value=h)
-        c.font = bold
-    row = 9
-    for i, (d, r) in enumerate(rows, 1):
-        ws.cell(row=row, column=1, value=i)
-        ws.cell(row=row, column=2, value=d.strftime("%d/%m/%Y"))
-        ws.cell(row=row, column=3, value=r["trx"])
-        ws.cell(row=row, column=4, value=r["omzet"])
-        row += 1
-    row += 1
-    ws.cell(row=row, column=3, value="TOTAL").font = bold
-    ws.cell(row=row, column=4, value=sum(r["omzet"] for _, r in rows)).font = bold
-    for col, w in zip("ABCD", [6, 14, 18, 16]):
-        ws.column_dimensions[col].width = w
-    out = BytesIO()
-    wb.save(out)
-    out.seek(0)
-    fn = "LaporanPenjualan_" + start_dt.strftime("%Y%m%d") + "_" + end_dt.strftime("%Y%m%d") + ".xlsx"
-    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=" + fn})
+    ws.title="Laporan"
+
+
+    ws["A1"]="CABANG"
+    ws["B1"]=": MEKAR SARI"
+
+    ws["A2"]="LAPORAN"
+    ws["B2"]=": LAPORAN LENGKAP"
+
+    ws["A3"]="PERIODE"
+    ws["B3"]=": "+start_dt.strftime("%d-%m-%Y")+" s/d "+end_dt.strftime("%d-%m-%Y")
+
+
+    ws["A5"]="RINGKASAN"
+
+
+    ringkasan=[
+        ("TOTAL TRANSAKSI",len(transaksi)),
+        ("TOTAL PENJUALAN",total_jual),
+        ("TOTAL PEMBELIAN",total_beli),
+        ("TOTAL PENGELUARAN",total_keluar),
+        ("LABA BERSIH",laba)
+    ]
+
+
+    row=6
+
+    for a,b in ringkasan:
+        ws.cell(row,1,a)
+        ws.cell(row,2,b)
+        row+=1
+
+
+    row+=2
+
+    ws.cell(row,1,"DETAIL HARIAN")
+    row+=2
+
+
+    header=[
+        "NO",
+        "TANGGAL",
+        "JUMLAH TRX",
+        "PENJUALAN"
+    ]
+
+
+    for i,h in enumerate(header,1):
+        ws.cell(row,i,h)
+        ws.cell(row,i).font=Font(bold=True)
+
+
+    row+=1
+
+    harian={}
+
+    for t in transaksi:
+        d=t.dibuat.date()
+        harian.setdefault(d,0)
+        harian[d]+=t.total or 0
+
+
+    for no,(tgl,total) in enumerate(harian.items(),1):
+        ws.cell(row,1,no)
+        ws.cell(row,2,tgl.strftime("%d-%m-%Y"))
+        ws.cell(row,4,total)
+        row+=1
+
+
+    for col in range(1,6):
+        ws.column_dimensions[
+            chr(64+col)
+        ].width=20
+
+
+    file=BytesIO()
+    wb.save(file)
+    file.seek(0)
+
+
+    return StreamingResponse(
+        file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=laporan-lengkap.xlsx"
+        }
+    )
 
 
 def _rp_filter(v):
